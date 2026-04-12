@@ -16,6 +16,15 @@ sys.path.insert(0, str(Path(__file__).parent))
 from notion_config import NOTION_KEY_PATH, DB_PLAYERS, DB_SCHEDULE
 
 
+# ── sync log ──────────────────────────────────────────────────
+
+def _append_sync_log(message: str) -> None:
+    log_path = Path(__file__).parent.parent / "sync.log"
+    now = datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y-%m-%d %H:%M JST")
+    with open(log_path, "a") as f:
+        f.write(f"{now} {message}\n")
+
+
 # ── Notion helpers ────────────────────────────────────────────
 
 def load_notion_key() -> str:
@@ -143,69 +152,74 @@ def get_today_game_data(today_str: str) -> tuple[set[str], set[str], bool]:
 # ── 主程式 ────────────────────────────────────────────────────
 
 def main():
-    notion_key = load_notion_key()
+    try:
+        notion_key = load_notion_key()
 
-    today_et = datetime.now(ZoneInfo("America/New_York")).date()
-    today_str = today_et.isoformat()
-    now_jst = datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%H:%M JST")
+        today_et = datetime.now(ZoneInfo("America/New_York")).date()
+        today_str = today_et.isoformat()
+        now_jst = datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%H:%M JST")
 
-    print(f"[update_lineup] {today_str}  執行時間：{now_jst}\n")
+        print(f"[update_lineup] {today_str}  執行時間：{now_jst}\n")
 
-    # DB1 投手名單
-    print("[Notion] 拉取 DB1 投手名單...")
-    pitchers = get_pitcher_names(notion_key)
-    print(f"  → 共 {len(pitchers)} 位投手\n")
+        # DB1 投手名單
+        print("[Notion] 拉取 DB1 投手名單...")
+        pitchers = get_pitcher_names(notion_key)
+        print(f"  → 共 {len(pitchers)} 位投手\n")
 
-    # DB2 今日 rows
-    print("[Notion] 拉取今日 DB2 rows...")
-    rows = get_today_rows(notion_key, today_str)
-    print(f"  → 共 {len(rows)} 筆（已排除 OFF）\n")
+        # DB2 今日 rows
+        print("[Notion] 拉取今日 DB2 rows...")
+        rows = get_today_rows(notion_key, today_str)
+        print(f"  → 共 {len(rows)} 筆（已排除 OFF）\n")
 
-    if not rows:
-        print("今日無需更新的 rows，結束。")
-        return
+        if not rows:
+            print("今日無需更新的 rows，結束。")
+            _append_sync_log(f"[update_lineup] 0 更新 / 0 無變動 / 0 失敗（今日無賽）")
+            return
 
-    # MLB 今日打線 + 先發
-    print("[MLB] 拉取今日打線與先發投手...")
-    in_batting_lineup, probable_starters, any_lineup_published = get_today_game_data(today_str)
-    print(f"  → 先發投手：{len(probable_starters)} 人  |  打線已公布：{'是' if any_lineup_published else '否'}  |  打線人數：{len(in_batting_lineup)}\n")
+        # MLB 今日打線 + 先發
+        print("[MLB] 拉取今日打線與先發投手...")
+        in_batting_lineup, probable_starters, any_lineup_published = get_today_game_data(today_str)
+        print(f"  → 先發投手：{len(probable_starters)} 人  |  打線已公布：{'是' if any_lineup_published else '否'}  |  打線人數：{len(in_batting_lineup)}\n")
 
-    # 更新
-    ok, skip, fail = 0, 0, 0
-    for row in rows:
-        name = row["name"]
-        is_pitcher = name in pitchers
+        # 更新
+        ok, skip, fail = 0, 0, 0
+        for row in rows:
+            name = row["name"]
+            is_pitcher = name in pitchers
 
-        if is_pitcher:
-            if name in probable_starters:
-                new_status = "START"
+            if is_pitcher:
+                if name in probable_starters:
+                    new_status = "START"
+                else:
+                    new_status = "TBD"
             else:
-                new_status = "TBD"  # 有賽但非先發（中繼或未確定）
-        else:
-            # 打者
-            if not any_lineup_published:
-                new_status = "TBD"
-            elif name in in_batting_lineup:
-                new_status = "IN"
-            else:
-                new_status = "OUT"
+                if not any_lineup_published:
+                    new_status = "TBD"
+                elif name in in_batting_lineup:
+                    new_status = "IN"
+                else:
+                    new_status = "OUT"
 
-        old_status = row["current_status"]
-        if new_status == old_status:
-            print(f"  [skip] {name:<28} {old_status}（無變動）")
-            skip += 1
-            continue
+            old_status = row["current_status"]
+            if new_status == old_status:
+                print(f"  [skip] {name:<28} {old_status}（無變動）")
+                skip += 1
+                continue
 
-        try:
-            patch_lineup_status(notion_key, row["page_id"], new_status)
-            tag = "P" if is_pitcher else "B"
-            print(f"  [更新/{tag}] {name:<26} {old_status} → {new_status}")
-            ok += 1
-        except Exception as e:
-            print(f"  [錯誤] {name}: {e}")
-            fail += 1
+            try:
+                patch_lineup_status(notion_key, row["page_id"], new_status)
+                tag = "P" if is_pitcher else "B"
+                print(f"  [更新/{tag}] {name:<26} {old_status} → {new_status}")
+                ok += 1
+            except Exception as e:
+                print(f"  [錯誤] {name}: {e}")
+                fail += 1
 
-    print(f"\n完成：{ok} 更新 / {skip} 無變動 / {fail} 失敗")
+        print(f"\n完成：{ok} 更新 / {skip} 無變動 / {fail} 失敗")
+        _append_sync_log(f"[update_lineup] {ok} 更新 / {skip} 無變動 / {fail} 失敗")
+    except Exception as e:
+        _append_sync_log(f"[update_lineup] ERROR: {e}")
+        raise
 
 
 if __name__ == "__main__":

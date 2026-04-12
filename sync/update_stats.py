@@ -30,6 +30,15 @@ BATTER_STATS  = {"R", "HR", "RBI", "SB", "AVG"}
 PITCHER_STATS = {"W", "SV", "K", "ERA", "WHIP"}
 
 
+# ── sync log ──────────────────────────────────────────────────
+
+def _append_sync_log(message: str) -> None:
+    log_path = Path(__file__).parent.parent / "sync.log"
+    now = datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y-%m-%d %H:%M JST")
+    with open(log_path, "a") as f:
+        f.write(f"{now} {message}\n")
+
+
 # ── Notion helpers ────────────────────────────────────────────
 
 def load_notion_key() -> str:
@@ -181,79 +190,81 @@ def upsert_stats_row(
 # ── 主程式 ────────────────────────────────────────────────────
 
 def main():
-    notion_key = load_notion_key()
+    try:
+        notion_key = load_notion_key()
 
-    sc = OAuth2(None, None, from_file="oauth2.json")
-    if not sc.token_is_valid():
-        sc.refresh_access_token()
+        sc = OAuth2(None, None, from_file="oauth2.json")
+        if not sc.token_is_valid():
+            sc.refresh_access_token()
 
-    gm     = yfa.Game(sc, "mlb")
-    league = gm.to_league(LEAGUE_ID)
-    week   = league.current_week()
+        gm     = yfa.Game(sc, "mlb")
+        league = gm.to_league(LEAGUE_ID)
+        week   = league.current_week()
 
-    print(f"Fantasy Week {week}  →  Notion DB3 Stats\n")
+        print(f"Fantasy Week {week}  →  Notion DB3 Stats\n")
 
-    print("[Notion] 拉取 DB1 球員清單...")
-    players = get_all_players(notion_key)
-    print(f"  → 共 {len(players)} 人\n")
+        print("[Notion] 拉取 DB1 球員清單...")
+        players = get_all_players(notion_key)
+        print(f"  → 共 {len(players)} 人\n")
 
-    print("[Notion] 拉取 DB3 本週已存在 rows...")
-    existing = get_existing_stats_titles(notion_key, week)
-    print(f"  → 本週已存在 {len(existing)} 筆\n")
+        print("[Notion] 拉取 DB3 本週已存在 rows...")
+        existing = get_existing_stats_titles(notion_key, week)
+        print(f"  → 本週已存在 {len(existing)} 筆\n")
 
-    # yahoo_fantasy_api 的 player_stats() 會自動加 "{game_id}.p." 前綴，
-    # 所以只傳數字 ID（字串格式），不傳完整 player_key
-    yahoo_ids   = [str(p["player_id"]) for p in players]
-    ok, fail    = 0, 0
+        yahoo_ids   = [str(p["player_id"]) for p in players]
+        ok, fail    = 0, 0
 
-    for period_label, req_type in PERIODS:
-        print(f"[Yahoo] 拉取 {period_label}（{req_type}）stats...")
-        try:
-            raw_stats = league.player_stats(yahoo_ids, req_type)
-        except Exception as e:
-            print(f"  [錯誤] 無法取得 {period_label} stats: {e}\n")
-            continue
-
-        # player_id（int）→ stat dict（library 回傳 player_id 數字，不是 player_key 字串）
-        stats_by_id: dict[int, dict] = {
-            item["player_id"]: item
-            for item in raw_stats
-            if "player_id" in item
-        }
-        print(f"  → 取得 {len(stats_by_id)} 人數據\n")
-
-        for player in players:
-            player_data = stats_by_id.get(player["player_id"], {})
-            stats       = extract_stats(player_data, player["position_type"])
+        for period_label, req_type in PERIODS:
+            print(f"[Yahoo] 拉取 {period_label}（{req_type}）stats...")
             try:
-                action = upsert_stats_row(
-                    notion_key, player, period_label, week, stats, existing
-                )
-                if player["position_type"] == "B":
-                    summary = (
-                        f"AVG={fmt_stat(stats.get('AVG'), '.3f')}  "
-                        f"HR={fmt_stat(stats.get('HR'))}  "
-                        f"R={fmt_stat(stats.get('R'))}  "
-                        f"RBI={fmt_stat(stats.get('RBI'))}  "
-                        f"SB={fmt_stat(stats.get('SB'))}"
-                    )
-                else:
-                    summary = (
-                        f"ERA={fmt_stat(stats.get('ERA'), '.2f')}  "
-                        f"WHIP={fmt_stat(stats.get('WHIP'), '.3f')}  "
-                        f"W={fmt_stat(stats.get('W'))}  "
-                        f"SV={fmt_stat(stats.get('SV'))}  "
-                        f"K={fmt_stat(stats.get('K'))}"
-                    )
-                print(f"  [{action}] {player['name']:<28} {period_label}  {summary}")
-                ok += 1
+                raw_stats = league.player_stats(yahoo_ids, req_type)
             except Exception as e:
-                print(f"  [錯誤] {player['name']} {period_label}: {e}")
-                fail += 1
+                print(f"  [錯誤] 無法取得 {period_label} stats: {e}\n")
+                continue
 
-        print()
+            stats_by_id: dict[int, dict] = {
+                item["player_id"]: item
+                for item in raw_stats
+                if "player_id" in item
+            }
+            print(f"  → 取得 {len(stats_by_id)} 人數據\n")
 
-    print(f"完成：{ok} 成功 / {fail} 失敗  →  Notion DB3 Stats")
+            for player in players:
+                player_data = stats_by_id.get(player["player_id"], {})
+                stats       = extract_stats(player_data, player["position_type"])
+                try:
+                    action = upsert_stats_row(
+                        notion_key, player, period_label, week, stats, existing
+                    )
+                    if player["position_type"] == "B":
+                        summary = (
+                            f"AVG={fmt_stat(stats.get('AVG'), '.3f')}  "
+                            f"HR={fmt_stat(stats.get('HR'))}  "
+                            f"R={fmt_stat(stats.get('R'))}  "
+                            f"RBI={fmt_stat(stats.get('RBI'))}  "
+                            f"SB={fmt_stat(stats.get('SB'))}"
+                        )
+                    else:
+                        summary = (
+                            f"ERA={fmt_stat(stats.get('ERA'), '.2f')}  "
+                            f"WHIP={fmt_stat(stats.get('WHIP'), '.3f')}  "
+                            f"W={fmt_stat(stats.get('W'))}  "
+                            f"SV={fmt_stat(stats.get('SV'))}  "
+                            f"K={fmt_stat(stats.get('K'))}"
+                        )
+                    print(f"  [{action}] {player['name']:<28} {period_label}  {summary}")
+                    ok += 1
+                except Exception as e:
+                    print(f"  [錯誤] {player['name']} {period_label}: {e}")
+                    fail += 1
+
+            print()
+
+        print(f"完成：{ok} 成功 / {fail} 失敗  →  Notion DB3 Stats")
+        _append_sync_log(f"[update_stats] {ok} 成功 / {fail} 失敗")
+    except Exception as e:
+        _append_sync_log(f"[update_stats] ERROR: {e}")
+        raise
 
 
 if __name__ == "__main__":

@@ -22,6 +22,15 @@ from notion_config import NOTION_KEY_PATH, DB_PLAYERS, DB_SCHEDULE
 LEAGUE_ID = "469.l.171948"
 
 
+# ── sync log ──────────────────────────────────────────────────
+
+def _append_sync_log(message: str) -> None:
+    log_path = Path(__file__).parent.parent / "sync.log"
+    now = datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y-%m-%d %H:%M JST")
+    with open(log_path, "a") as f:
+        f.write(f"{now} {message}\n")
+
+
 # ── Notion helpers ────────────────────────────────────────────
 
 def load_notion_key() -> str:
@@ -223,78 +232,83 @@ def upsert_schedule_row(
 # ── 主程式 ────────────────────────────────────────────────────
 
 def main():
-    notion_key = load_notion_key()
+    try:
+        notion_key = load_notion_key()
 
-    # 日期基準：美東時間（ET）
-    today_et = datetime.now(ZoneInfo("America/New_York")).date()
+        # 日期基準：美東時間（ET）
+        today_et = datetime.now(ZoneInfo("America/New_York")).date()
 
-    # Yahoo API：取當前週次
-    sc = OAuth2(None, None, from_file="oauth2.json")
-    if not sc.token_is_valid():
-        sc.refresh_access_token()
-    gm = yfa.Game(sc, "mlb")
-    league = gm.to_league(LEAGUE_ID)
-    week = league.current_week()
+        # Yahoo API：取當前週次
+        sc = OAuth2(None, None, from_file="oauth2.json")
+        if not sc.token_is_valid():
+            sc.refresh_access_token()
+        gm = yfa.Game(sc, "mlb")
+        league = gm.to_league(LEAGUE_ID)
+        week = league.current_week()
 
-    # Fantasy 週次日期：start_date + (week - 1) * 7
-    # league_info.json: start_date = 2026-03-25, start_week = 1
-    season_start = date(2026, 3, 25)
-    week_start = season_start + timedelta(weeks=week - 1)
-    week_end = week_start + timedelta(days=6)
+        # Fantasy 週次日期：start_date + (week - 1) * 7
+        # league_info.json: start_date = 2026-03-25, start_week = 1
+        season_start = date(2026, 3, 25)
+        week_start = season_start + timedelta(weeks=week - 1)
+        week_end = week_start + timedelta(days=6)
 
-    print(f"Fantasy Week {week}：{week_start} ～ {week_end}（ET）")
-    print(f"今日 ET：{today_et}\n")
+        print(f"Fantasy Week {week}：{week_start} ～ {week_end}（ET）")
+        print(f"今日 ET：{today_et}\n")
 
-    # MLB team ID map
-    print("[MLB] 拉取球隊 ID 對照表...")
-    abbr_to_id, id_to_abbr = get_mlb_team_ids()
+        # MLB team ID map
+        print("[MLB] 拉取球隊 ID 對照表...")
+        abbr_to_id, id_to_abbr = get_mlb_team_ids()
 
-    # DB1 球員清單
-    print("[Notion] 拉取 DB1 球員清單...")
-    players = get_all_players(notion_key)
-    print(f"  → 共 {len(players)} 人（My Roster + Trade Target）\n")
+        # DB1 球員清單
+        print("[Notion] 拉取 DB1 球員清單...")
+        players = get_all_players(notion_key)
+        print(f"  → 共 {len(players)} 人（My Roster + Trade Target）\n")
 
-    # 預先拉本週已存在的 DB2 rows（batch query，減少 API 呼叫）
-    print("[Notion] 拉取 DB2 本週已存在的 rows...")
-    existing = get_existing_schedule_titles(notion_key, week_start, week_end)
-    print(f"  → 本週已存在 {len(existing)} 筆\n")
+        # 預先拉本週已存在的 DB2 rows（batch query，減少 API 呼叫）
+        print("[Notion] 拉取 DB2 本週已存在的 rows...")
+        existing = get_existing_schedule_titles(notion_key, week_start, week_end)
+        print(f"  → 本週已存在 {len(existing)} 筆\n")
 
-    # 每支 MLB 球隊的賽程（去重，只打一次 API）
-    unique_teams = {p["mlb_team"] for p in players if p["mlb_team"] and p["mlb_team"] != "FA"}
-    schedule_by_team: dict[int, dict] = {}
-    print(f"[MLB] 拉取 {len(unique_teams)} 支球隊賽程...")
-    for abbr in sorted(unique_teams):
-        team_id = abbr_to_id.get(abbr)
-        if team_id:
-            schedule_by_team[team_id] = get_team_schedule(team_id, week_start, week_end, id_to_abbr)
-    print()
+        # 每支 MLB 球隊的賽程（去重，只打一次 API）
+        unique_teams = {p["mlb_team"] for p in players if p["mlb_team"] and p["mlb_team"] != "FA"}
+        schedule_by_team: dict[int, dict] = {}
+        print(f"[MLB] 拉取 {len(unique_teams)} 支球隊賽程...")
+        for abbr in sorted(unique_teams):
+            team_id = abbr_to_id.get(abbr)
+            if team_id:
+                schedule_by_team[team_id] = get_team_schedule(team_id, week_start, week_end, id_to_abbr)
+        print()
 
-    # upsert 每球員 × 每天
-    days = [week_start + timedelta(days=i) for i in range(7)]
-    ok, fail = 0, 0
+        # upsert 每球員 × 每天
+        days = [week_start + timedelta(days=i) for i in range(7)]
+        ok, fail = 0, 0
 
-    for player in players:
-        team_id = abbr_to_id.get(player["mlb_team"])
-        sched = schedule_by_team.get(team_id, {}) if team_id else {}
-        row_results = []
+        for player in players:
+            team_id = abbr_to_id.get(player["mlb_team"])
+            sched = schedule_by_team.get(team_id, {}) if team_id else {}
+            row_results = []
 
-        for day in days:
-            game_info = sched.get(day.isoformat())
-            try:
-                action, lineup_status = upsert_schedule_row(
-                    notion_key, player, day, today_et, game_info, week, existing
-                )
-                matchup = game_info["matchup"] if game_info else "OFF"
-                row_results.append(f"{day.isoformat()[5:]} {matchup}[{lineup_status}]({action[0]})")
-                ok += 1
-            except Exception as e:
-                row_results.append(f"{day.isoformat()[5:]} ERR")
-                print(f"  [錯誤] {player['name']} {day.isoformat()}: {e}")
-                fail += 1
+            for day in days:
+                game_info = sched.get(day.isoformat())
+                try:
+                    action, lineup_status = upsert_schedule_row(
+                        notion_key, player, day, today_et, game_info, week, existing
+                    )
+                    matchup = game_info["matchup"] if game_info else "OFF"
+                    row_results.append(f"{day.isoformat()[5:]} {matchup}[{lineup_status}]({action[0]})")
+                    ok += 1
+                except Exception as e:
+                    row_results.append(f"{day.isoformat()[5:]} ERR")
+                    print(f"  [錯誤] {player['name']} {day.isoformat()}: {e}")
+                    fail += 1
 
-        print(f"  {player['name']:<28} {' | '.join(row_results)}")
+            print(f"  {player['name']:<28} {' | '.join(row_results)}")
 
-    print(f"\n完成：{ok} 成功 / {fail} 失敗  →  Notion DB2 Schedule")
+        print(f"\n完成：{ok} 成功 / {fail} 失敗  →  Notion DB2 Schedule")
+        _append_sync_log(f"[update_schedule] {ok} 成功 / {fail} 失敗")
+    except Exception as e:
+        _append_sync_log(f"[update_schedule] ERROR: {e}")
+        raise
 
 
 if __name__ == "__main__":

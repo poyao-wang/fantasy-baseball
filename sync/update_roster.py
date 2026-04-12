@@ -8,13 +8,24 @@ import sys
 import requests
 import yahoo_fantasy_api as yfa
 from yahoo_oauth import OAuth2
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 # sync/ 的上層就是專案根，把根目錄加入 path 才能 import notion_config
 sys.path.insert(0, str(Path(__file__).parent))
 from notion_config import NOTION_KEY_PATH, DB_PLAYERS
 
 LEAGUE_ID = "469.l.171948"
+
+
+# ── sync log ──────────────────────────────────────────────────
+
+def _append_sync_log(message: str) -> None:
+    log_path = Path(__file__).parent.parent / "sync.log"
+    now = datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y-%m-%d %H:%M JST")
+    with open(log_path, "a") as f:
+        f.write(f"{now} {message}\n")
 
 
 # ── Notion helpers ────────────────────────────────────────────
@@ -116,34 +127,39 @@ def upsert_player(key: str, p: dict) -> str:
 # ── 主程式 ────────────────────────────────────────────────────
 
 def main():
-    notion_key = load_notion_key()
+    try:
+        notion_key = load_notion_key()
 
-    sc = OAuth2(None, None, from_file="oauth2.json")
-    if not sc.token_is_valid():
-        sc.refresh_access_token()
+        sc = OAuth2(None, None, from_file="oauth2.json")
+        if not sc.token_is_valid():
+            sc.refresh_access_token()
 
-    gm = yfa.Game(sc, "mlb")
-    league = gm.to_league(LEAGUE_ID)
-    my_team = league.to_team(league.team_key())
-    roster = my_team.roster()
+        gm = yfa.Game(sc, "mlb")
+        league = gm.to_league(LEAGUE_ID)
+        my_team = league.to_team(league.team_key())
+        roster = my_team.roster()
 
-    print(f"陣容共 {len(roster)} 人，開始 upsert 到 Notion DB1...\n")
+        print(f"陣容共 {len(roster)} 人，開始 upsert 到 Notion DB1...\n")
 
-    ok, fail = 0, 0
-    for p in roster:
-        try:
-            action = upsert_player(notion_key, p)
-            slot = p.get("selected_position", "?")
-            pos_type = p.get("position_type", "?")
-            status = normalize_status(p)
-            flag = f" ⚠ {p['status']}" if p.get("status") else ""
-            print(f"  [{action}] {p['name']:<28} {pos_type} [{slot}] {status}{flag}")
-            ok += 1
-        except Exception as e:
-            print(f"  [錯誤] {p.get('name', '?')}: {e}")
-            fail += 1
+        ok, fail = 0, 0
+        for p in roster:
+            try:
+                action = upsert_player(notion_key, p)
+                slot = p.get("selected_position", "?")
+                pos_type = p.get("position_type", "?")
+                status = normalize_status(p)
+                flag = f" ⚠ {p['status']}" if p.get("status") else ""
+                print(f"  [{action}] {p['name']:<28} {pos_type} [{slot}] {status}{flag}")
+                ok += 1
+            except Exception as e:
+                print(f"  [錯誤] {p.get('name', '?')}: {e}")
+                fail += 1
 
-    print(f"\n完成：{ok} 成功 / {fail} 失敗  →  Notion DB1 Players")
+        print(f"\n完成：{ok} 成功 / {fail} 失敗  →  Notion DB1 Players")
+        _append_sync_log(f"[update_roster] {ok} 成功 / {fail} 失敗")
+    except Exception as e:
+        _append_sync_log(f"[update_roster] ERROR: {e}")
+        raise
 
 
 if __name__ == "__main__":
