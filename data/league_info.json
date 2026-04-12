@@ -1,0 +1,516 @@
+{
+  "settings": {
+    "league_key": "469.l.171948",
+    "league_id": "171948",
+    "name": "Taiwan X Canada League",
+    "url": "https://baseball.fantasysports.yahoo.com/b1/171948",
+    "recordbook_url": "https://baseball.fantasysports.yahoo.com/b1/171948/recordbook?layout=webview&device=smartphone",
+    "logo_url": "https://s.yimg.com/ep/cx/blendr/v2/image-foam-finger-png_1721252412344.png",
+    "draft_status": "postdraft",
+    "num_teams": 10,
+    "edit_key": "2026-04-11",
+    "weekly_deadline": "intraday",
+    "roster_type": "date",
+    "league_update_timestamp": "1775894434",
+    "scoring_type": "head",
+    "league_type": "private",
+    "renew": "",
+    "renewed": "",
+    "felo_tier": "silver",
+    "is_highscore": false,
+    "matchup_week": 3,
+    "iris_group_chat_id": "",
+    "short_invitation_url": "https://baseball.fantasysports.yahoo.com/b1/171948/invitation?key=5c622de7486ccd47&ikey=c6a7d17e09311501",
+    "allow_add_to_dl_extra_pos": 1,
+    "is_pro_league": "0",
+    "is_cash_league": "0",
+    "current_week": 3,
+    "start_week": "1",
+    "start_date": "2026-03-25",
+    "end_week": "26",
+    "end_date": "2026-09-27",
+    "current_date": "2026-04-11",
+    "is_plus_league": "0",
+    "game_code": "mlb",
+    "season": "2026",
+    "draft_type": "live",
+    "is_auction_draft": "0",
+    "invite_permission": "all",
+    "uses_playoff": "1",
+    "has_playoff_consolation_games": true,
+    "playoff_start_week": "24",
+    "uses_playoff_reseeding": 1,
+    "uses_lock_eliminated_teams": 0,
+    "num_playoff_teams": "6",
+    "num_playoff_consolation_teams": 6,
+    "has_multiweek_championship": 0,
+    "waiver_type": "FR",
+    "waiver_rule": "continuous",
+    "waiver_days": [
+      {
+        "day": "0"
+      },
+      {
+        "day": "1"
+      },
+      {
+        "day": "2"
+      },
+      {
+        "day": "3"
+      },
+      {
+        "day": "4"
+      },
+      {
+        "day": "5"
+      },
+      {
+        "day": "6"
+      }
+    ],
+    "uses_faab": "1",
+    "draft_time": "1774098000",
+    "draft_pick_time": "60",
+    "post_draft_players": "W",
+    "max_teams": "12",
+    "waiver_time": "2",
+    "trade_end_date": "2026-08-06",
+    "trade_ratify_type": "vote",
+    "trade_reject_time": "2",
+    "player_pool": "ALL",
+    "cant_cut_list": "yahoo",
+    "draft_together": 0,
+    "sendbird_channel_url": "09a001248cc8c606c215431511e751a3",
+    "max_weekly_adds": "6",
+    "uses_median_score": false,
+    "league_premium_features": []
+  },
+  "stat_categories": [
+    {
+      "display_name": "R",
+      "position_type": "B"
+    },
+    {
+      "display_name": "HR",
+      "position_type": "B"
+    },
+    {
+      "display_name": "RBI",
+      "position_type": "B"
+    },
+    {
+      "display_name": "SB",
+      "position_type": "B"
+    },
+    {
+      "display_name": "AVG",
+      "position_type": "B"
+    },
+    {
+      "display_name": "W",
+      "position_type": "P"
+    },
+    {
+      "display_name": "SV",
+      "position_type": "P"
+    },
+    {
+      "display_name": "K",
+      "position_type": "P"
+    },
+    {
+      "display_name": "ERA",
+      "position_type": "P"
+    },
+    {
+      "display_name": "WHIP",
+      "position_type": "P"
+    }
+  ],
+  "teams": {
+    "469.l.171948.t.10": {
+      "team_key": "469.l.171948.t.10",
+      "team_id": "10",
+      "name": "板橋珊迪醬",
+      "url": "https://baseball.fantasysports.yahoo.com/b1/171948/10",
+      "team_logos": [
+        {
+          "team_logo": {
+            "size": "large",
+            "url": "https://s.yimg.com/ba/images/55369ab594956cdab8910cb8e4c4082535994ef404e6c8e06793072e440850b2.png"
+          }
+        }
+      ],
+      "waiver_priority": 2,
+      "faab_balance": "100",
+      "number_of_moves": 0,
+      "number_of_trades": 0,
+      "roster_adds": {
+        "coverage_type": "week",
+        "coverage_value": 3,
+        "value": "0"
+      },
+      "league_scoring_type": "head",
+      "draft_position": 9,
+      "has_draft_grade": 0,
+      "managers": [
+        {
+          "manager": {
+            "manager_id": "10",
+            "nickname": "珊迪",
+            "guid": "TVE3UGUKEYDTP6DXX6JLSDECKQ",
+            "image_url": "https://s.yimg.com/ag/images/default_user_profile_pic_64sq.jpg",
+            "felo_score": "600",
+            "felo_tier": "silver"
+          }
+        }
+      ]
+    },
+    "469.l.171948.t.3": {
+      "team_key": "469.l.171948.t.3",
+      "team_id": "3",
+      "name": "堯's MVPs",
+      "is_owned_by_current_login": 1,
+      "url": "https://baseball.fantasysports.yahoo.com/b1/171948/3",
+      "team_logos": [
+        {
+          "team_logo": {
+            "size": "large",
+            "url": "https://s.yimg.com/ep/cx/blendr/v2/image-foam-finger-png_1721252412344.png"
+          }
+        }
+      ],
+      "waiver_priority": 4,
+      "faab_balance": "99",
+      "number_of_moves": 7,
+      "number_of_trades": 0,
+      "roster_adds": {
+        "coverage_type": "week",
+        "coverage_value": 3,
+        "value": "3"
+      },
+      "league_scoring_type": "head",
+      "draft_position": 6,
+      "has_draft_grade": 0,
+      "managers": [
+        {
+          "manager": {
+            "manager_id": "3",
+            "nickname": "堯",
+            "guid": "SDO4X4R5557TTYKGQC3JPTHRLU",
+            "is_current_login": "1",
+            "image_url": "https://s.yimg.com/ag/images/default_user_profile_pic_64sq.jpg",
+            "felo_score": "610",
+            "felo_tier": "silver"
+          }
+        }
+      ]
+    },
+    "469.l.171948.t.7": {
+      "team_key": "469.l.171948.t.7",
+      "team_id": "7",
+      "name": "Big Hitter Ling",
+      "url": "https://baseball.fantasysports.yahoo.com/b1/171948/7",
+      "team_logos": [
+        {
+          "team_logo": {
+            "size": "large",
+            "url": "https://s.yimg.com/ep/cx/blendr/v2/image-dumbbell-png_1736291500828.png"
+          }
+        }
+      ],
+      "waiver_priority": 6,
+      "faab_balance": "88",
+      "number_of_moves": 15,
+      "number_of_trades": 0,
+      "roster_adds": {
+        "coverage_type": "week",
+        "coverage_value": 3,
+        "value": "6"
+      },
+      "league_scoring_type": "head",
+      "draft_position": 4,
+      "has_draft_grade": 0,
+      "managers": [
+        {
+          "manager": {
+            "manager_id": "7",
+            "nickname": "Ling",
+            "guid": "4KU6RH7OX7VLFRJS7YOJJK3R3Q",
+            "image_url": "https://s.yimg.com/ag/images/4db12761-5ed5-4135-97c5-629d1aa2006d0s_64sq.jpg",
+            "felo_score": "607",
+            "felo_tier": "silver"
+          }
+        }
+      ]
+    },
+    "469.l.171948.t.6": {
+      "team_key": "469.l.171948.t.6",
+      "team_id": "6",
+      "name": "平鎮佐佐木拉稀",
+      "url": "https://baseball.fantasysports.yahoo.com/b1/171948/6",
+      "team_logos": [
+        {
+          "team_logo": {
+            "size": "large",
+            "url": "https://yahoofantasysports-res.cloudinary.com/image/upload/t_s192sq/fantasy-logos/89c727b3172e9c41f000c0f00899358a0ae57ff4cc77a1250e24d8f56e0d93c1.jpg"
+          }
+        }
+      ],
+      "waiver_priority": 1,
+      "faab_balance": "0",
+      "number_of_moves": 2,
+      "number_of_trades": 0,
+      "roster_adds": {
+        "coverage_type": "week",
+        "coverage_value": 3,
+        "value": "2"
+      },
+      "league_scoring_type": "head",
+      "draft_position": 10,
+      "has_draft_grade": 0,
+      "managers": [
+        {
+          "manager": {
+            "manager_id": "6",
+            "nickname": "vivande",
+            "guid": "A5HANVDEF4KTTFPNYYQVK2KWVU",
+            "image_url": "https://s.yimg.com/ag/images/default_user_profile_pic_64sq.jpg",
+            "felo_score": "602",
+            "felo_tier": "silver"
+          }
+        }
+      ]
+    },
+    "469.l.171948.t.4": {
+      "team_key": "469.l.171948.t.4",
+      "team_id": "4",
+      "name": "三重田中貞子丹",
+      "url": "https://baseball.fantasysports.yahoo.com/b1/171948/4",
+      "team_logos": [
+        {
+          "team_logo": {
+            "size": "large",
+            "url": "https://s.yimg.com/ep/cx/blendr/v2/image-hot-pretzel-png_1721176263435.png"
+          }
+        }
+      ],
+      "waiver_priority": 5,
+      "faab_balance": "95",
+      "number_of_moves": 1,
+      "number_of_trades": 0,
+      "roster_adds": {
+        "coverage_type": "week",
+        "coverage_value": 3,
+        "value": "0"
+      },
+      "league_scoring_type": "head",
+      "draft_position": 5,
+      "has_draft_grade": 0,
+      "managers": [
+        {
+          "manager": {
+            "manager_id": "4",
+            "nickname": "盈孜",
+            "guid": "A46CU72JEQIXSOSIIQOAARDH7E",
+            "image_url": "https://s.yimg.com/ag/images/default_user_profile_pic_64sq.jpg",
+            "felo_score": "591",
+            "felo_tier": "bronze"
+          }
+        }
+      ]
+    },
+    "469.l.171948.t.5": {
+      "team_key": "469.l.171948.t.5",
+      "team_id": "5",
+      "name": "Monkey Never Cramps",
+      "url": "https://baseball.fantasysports.yahoo.com/b1/171948/5",
+      "team_logos": [
+        {
+          "team_logo": {
+            "size": "large",
+            "url": "https://s.yimg.com/ba/images/52ec3902d2b2dfea85aa1f576e215ace5c465f6708696d61f71a1b9ec957e2d2.png"
+          }
+        }
+      ],
+      "waiver_priority": 9,
+      "faab_balance": "100",
+      "number_of_moves": 1,
+      "number_of_trades": 0,
+      "roster_adds": {
+        "coverage_type": "week",
+        "coverage_value": 3,
+        "value": "0"
+      },
+      "league_scoring_type": "head",
+      "draft_position": 1,
+      "has_draft_grade": 0,
+      "managers": [
+        {
+          "manager": {
+            "manager_id": "5",
+            "nickname": "Jadyn",
+            "guid": "OVCAP2R6JRKBTPOGBLWOYYIO3A",
+            "image_url": "https://s.yimg.com/ag/images/16411308-9fc8-4a07-b81f-4dbdf013129c9G_64sq.jpg",
+            "felo_score": "588",
+            "felo_tier": "bronze"
+          }
+        }
+      ]
+    },
+    "469.l.171948.t.1": {
+      "team_key": "469.l.171948.t.1",
+      "team_id": "1",
+      "name": "中和三本油雞",
+      "url": "https://baseball.fantasysports.yahoo.com/b1/171948/1",
+      "team_logos": [
+        {
+          "team_logo": {
+            "size": "large",
+            "url": "https://s.yimg.com/ep/cx/blendr/v2/image-batsand-balls-png_1721241176264.png"
+          }
+        }
+      ],
+      "waiver_priority": 10,
+      "faab_balance": "70",
+      "number_of_moves": 8,
+      "number_of_trades": 0,
+      "roster_adds": {
+        "coverage_type": "week",
+        "coverage_value": 3,
+        "value": "4"
+      },
+      "league_scoring_type": "head",
+      "draft_position": 8,
+      "has_draft_grade": 0,
+      "managers": [
+        {
+          "manager": {
+            "manager_id": "1",
+            "nickname": "qoo",
+            "guid": "AURK5KIXWRSDTO6GIPNX4AIPQM",
+            "is_commissioner": "1",
+            "image_url": "https://s.yimg.com/ag/images/default_user_profile_pic_64sq.jpg",
+            "felo_score": "655",
+            "felo_tier": "silver"
+          }
+        }
+      ]
+    },
+    "469.l.171948.t.9": {
+      "team_key": "469.l.171948.t.9",
+      "team_id": "9",
+      "name": "金采源的狗",
+      "url": "https://baseball.fantasysports.yahoo.com/b1/171948/9",
+      "team_logos": [
+        {
+          "team_logo": {
+            "size": "large",
+            "url": "https://yahoofantasysports-res.cloudinary.com/image/upload/t_s192sq/fantasy-logos/dd9ca61f5df1aa148dd2893e637ea4f9d28f6b1559d813717eeb203141a8c5f7.png"
+          }
+        }
+      ],
+      "waiver_priority": 3,
+      "faab_balance": "89",
+      "number_of_moves": 4,
+      "number_of_trades": 0,
+      "roster_adds": {
+        "coverage_type": "week",
+        "coverage_value": 3,
+        "value": "0"
+      },
+      "league_scoring_type": "head",
+      "draft_position": 7,
+      "has_draft_grade": 0,
+      "managers": [
+        {
+          "manager": {
+            "manager_id": "9",
+            "nickname": "愛的朱大哥",
+            "guid": "CXUZDC2Y63UAN32RSXYFEIEU3Y",
+            "image_url": "https://s.yimg.com/ag/images/7c0961f6-1fe7-42d3-b008-bd4186391ae3Di_64sq.jpg",
+            "felo_score": "594",
+            "felo_tier": "bronze"
+          }
+        }
+      ]
+    },
+    "469.l.171948.t.2": {
+      "team_key": "469.l.171948.t.2",
+      "team_id": "2",
+      "name": "三重大薯翔平",
+      "url": "https://baseball.fantasysports.yahoo.com/b1/171948/2",
+      "team_logos": [
+        {
+          "team_logo": {
+            "size": "large",
+            "url": "https://yahoofantasysports-res.cloudinary.com/image/upload/t_s192sq/fantasy-logos/9e45b230e99e380dbfb25bf3c7cc0eb420830814ea6f9edf78aa5b862017e427.jpg"
+          }
+        }
+      ],
+      "waiver_priority": 8,
+      "faab_balance": "80",
+      "number_of_moves": 1,
+      "number_of_trades": 0,
+      "roster_adds": {
+        "coverage_type": "week",
+        "coverage_value": 3,
+        "value": "1"
+      },
+      "league_scoring_type": "head",
+      "draft_position": 2,
+      "has_draft_grade": 0,
+      "managers": [
+        {
+          "manager": {
+            "manager_id": "2",
+            "nickname": "LiHeng",
+            "guid": "RMQWTHYA6AUMBOD55YUTGRFAVE",
+            "image_url": "https://s.yimg.com/ag/images/7ed85d57-fe8a-49cc-ae55-843ff99caae3js_64sq.jpg",
+            "felo_score": "591",
+            "felo_tier": "bronze"
+          }
+        }
+      ]
+    },
+    "469.l.171948.t.8": {
+      "team_key": "469.l.171948.t.8",
+      "team_id": "8",
+      "name": "Donna's Torches",
+      "url": "https://baseball.fantasysports.yahoo.com/b1/171948/8",
+      "team_logos": [
+        {
+          "team_logo": {
+            "size": "large",
+            "url": "https://yahoofantasysports-res.cloudinary.com/image/upload/t_s192sq/fantasy-logos/a3929c8c13cee0d34fc4ac2d28b922f0a6444f8d9b1d5b70edc16a70f483083d.jpg"
+          }
+        }
+      ],
+      "waiver_priority": 7,
+      "faab_balance": "100",
+      "number_of_moves": 2,
+      "number_of_trades": 0,
+      "roster_adds": {
+        "coverage_type": "week",
+        "coverage_value": 3,
+        "value": "1"
+      },
+      "league_scoring_type": "head",
+      "draft_position": 3,
+      "has_draft_grade": 0,
+      "managers": [
+        {
+          "manager": {
+            "manager_id": "8",
+            "nickname": "Donna",
+            "guid": "3KXDKU55KVYJIYCEFX5GXP3Q4I",
+            "image_url": "https://s.yimg.com/ag/images/default_user_profile_pic_64sq.jpg",
+            "felo_score": "588",
+            "felo_tier": "bronze"
+          }
+        }
+      ]
+    }
+  }
+}

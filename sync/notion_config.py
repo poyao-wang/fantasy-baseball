@@ -1,0 +1,10 @@
+# Notion DB IDs — Fantasy Baseball
+# Workspace: 新 Workspace（第二個）
+# API Key: ~/.config/notion/api_key_new
+# Parent page: Yahoo-Fantasy-Baseball (34048ad3-2a1c-80a0-bcaa-ca973c2d4100)
+
+NOTION_KEY_PATH = "~/.config/notion/api_key_new"
+
+DB_PLAYERS  = "1eb4bb64-da35-4e9d-b740-f36c8569d3a6"
+DB_SCHEDULE = "4bf3af3c-7095-493a-8746-5ad0fc9f147f"
+DB_STATS    = "d3de639b-94af-44e3-9795-9ac965bb5419"
