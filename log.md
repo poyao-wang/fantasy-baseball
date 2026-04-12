@@ -27,6 +27,8 @@
 2026-04-12 21:13 [Script] sync/add_trade_target.py — 交易目標一鍵加入，支援姓名或 --id，自動 upsert DB1（Trade Target）+ DB2 本週 7 天賽程 + DB3 三個 period 統計快照
 2026-04-12 21:18 [Fix] add_trade_target.py 姓名搜尋修正：player_details() 只接受 player_key，改用直接呼叫 Yahoo Fantasy API search 端點（/players;search={name}/stats），解析 JSON 回傳結構取得球員資訊
 2026-04-12 21:19 [Test] add_trade_target.py 驗證通過：Lucas Erceg（KC RP）11 筆全成功（DB1×1 + DB2×7 + DB3×3）
+2026-04-12 21:31 [Repo] 專案從 life-os 獨立為 standalone repo，移至 ~/Documents/projects/fantasy-baseball/，推送至 GitHub（poyao-wang/fantasy-baseball，private）
+2026-04-12 21:31 [Config] 新增 CLAUDE.md（專案指引）、補強 .gitignore（cache/ output/ __pycache__ .env）
 
 ---
 
