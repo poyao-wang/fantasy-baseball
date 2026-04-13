@@ -1,19 +1,27 @@
 """
-update_lineup.py — 只更新 DB2 Schedule 今日打線/先發狀態（Lineup_Status）
+update_lineup.py — 更新 DB2 今日打線/先發狀態（Lineup_Status）+ DB1 Current_Slot
 
-打者：IN（在打線）/ OUT（有賽不在打線）/ TBD（打線未公布）/ OFF（休息日）
-投手：START（今日先發）/ TBD（有賽但非先發）/ OFF（休息日）
+Lineup_Status（DB2）：
+  打者：IN（在打線）/ OUT（有賽不在打線）/ TBD（打線未公布）/ OFF（休息日）
+  投手：START（今日先發）/ TBD（有賽但非先發）/ OFF（休息日）
+
+Current_Slot（DB1）：
+  從 Yahoo Fantasy API 拉最新陣容，有變動才更新（輪值/換人即時反映）
 
 執行時機：每小時 22:00–08:00 JST（= 13:00–23:00 UTC），RPi cron
 """
 import sys
 import requests
+import yahoo_fantasy_api as yfa
+from yahoo_oauth import OAuth2
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).parent))
 from notion_config import NOTION_KEY_PATH, DB_PLAYERS, DB_SCHEDULE
+
+LEAGUE_ID = "469.l.171948"
 
 
 # ── sync log ──────────────────────────────────────────────────
@@ -109,6 +117,41 @@ def patch_lineup_status(key: str, page_id: str, status: str) -> None:
     r.raise_for_status()
 
 
+def get_db1_slots(key: str) -> dict[int, tuple[str, str]]:
+    """從 DB1 拉 My Roster 所有球員，回傳 {player_id: (page_id, current_slot)}"""
+    url = f"https://api.notion.com/v1/databases/{DB_PLAYERS}/query"
+    body: dict = {
+        "page_size": 100,
+        "filter": {"property": "Player_Type", "select": {"equals": "My Roster"}},
+    }
+    result: dict[int, tuple[str, str]] = {}
+    while True:
+        r = requests.post(url, headers=notion_headers(key), json=body)
+        r.raise_for_status()
+        data = r.json()
+        for page in data["results"]:
+            props = page["properties"]
+            pid = props["Player_ID"]["number"]
+            slot = (props["Current_Slot"]["select"] or {}).get("name", "BN")
+            if pid is not None:
+                result[int(pid)] = (page["id"], slot)
+        if data.get("has_more"):
+            body["start_cursor"] = data["next_cursor"]
+        else:
+            break
+    return result
+
+
+def patch_current_slot(key: str, page_id: str, slot: str) -> None:
+    url = f"https://api.notion.com/v1/pages/{page_id}"
+    r = requests.patch(
+        url,
+        headers=notion_headers(key),
+        json={"properties": {"Current_Slot": {"select": {"name": slot}}}},
+    )
+    r.raise_for_status()
+
+
 # ── MLB Stats API ─────────────────────────────────────────────
 
 def get_today_game_data(today_str: str) -> tuple[set[str], set[str], bool]:
@@ -160,6 +203,44 @@ def main():
         now_jst = datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%H:%M JST")
 
         print(f"[update_lineup] {today_str}  執行時間：{now_jst}\n")
+
+        # ── Current_Slot 同步（DB1）────────────────────────────
+        print("[Yahoo] 拉取最新陣容...")
+        sc = OAuth2(None, None, from_file="oauth2.json")
+        if not sc.token_is_valid():
+            sc.refresh_access_token()
+        league = yfa.Game(sc, "mlb").to_league(LEAGUE_ID)
+        roster = league.to_team(league.team_key()).roster()
+
+        yahoo_slots: dict[int, tuple[str, str]] = {}  # {player_id: (name, slot)}
+        for p in roster:
+            key_str = p.get("player_key", "")
+            pid = int(p["player_id"]) if "player_id" in p else int(key_str.split(".")[-1])
+            yahoo_slots[pid] = (p["name"], p.get("selected_position", "BN"))
+        print(f"  → 陣容 {len(yahoo_slots)} 人\n")
+
+        print("[Notion] 拉取 DB1 Current_Slot...")
+        db1_slots = get_db1_slots(notion_key)
+        print(f"  → 共 {len(db1_slots)} 筆\n")
+
+        slot_ok, slot_skip, slot_fail = 0, 0, 0
+        for pid, (name, new_slot) in yahoo_slots.items():
+            if pid not in db1_slots:
+                continue
+            page_id, old_slot = db1_slots[pid]
+            if new_slot == old_slot:
+                slot_skip += 1
+                continue
+            try:
+                patch_current_slot(notion_key, page_id, new_slot)
+                print(f"  [slot] {name:<28} {old_slot} → {new_slot}")
+                slot_ok += 1
+            except Exception as e:
+                print(f"  [slot錯誤] {name}: {e}")
+                slot_fail += 1
+
+        print(f"Current_Slot：{slot_ok} 更新 / {slot_skip} 無變動 / {slot_fail} 失敗\n")
+        _append_sync_log(f"[update_lineup] slot {slot_ok} 更新 / {slot_skip} 無變動 / {slot_fail} 失敗")
 
         # DB1 投手名單
         print("[Notion] 拉取 DB1 投手名單...")
@@ -215,8 +296,11 @@ def main():
                 print(f"  [錯誤] {name}: {e}")
                 fail += 1
 
-        print(f"\n完成：{ok} 更新 / {skip} 無變動 / {fail} 失敗")
-        _append_sync_log(f"[update_lineup] {ok} 更新 / {skip} 無變動 / {fail} 失敗")
+        print(f"\n完成：Lineup_Status {ok} 更新 / {skip} 無變動 / {fail} 失敗")
+        _append_sync_log(
+            f"[update_lineup] Lineup_Status {ok}更新/{skip}無變動/{fail}失敗  "
+            f"| Current_Slot {slot_ok}更新/{slot_skip}無變動/{slot_fail}失敗"
+        )
     except Exception as e:
         _append_sync_log(f"[update_lineup] ERROR: {e}")
         raise
