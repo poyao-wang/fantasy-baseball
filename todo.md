@@ -25,19 +25,27 @@
 - [x] 寫 `update_stats.py`（DB3 區間快照：7d / 30d / season，每球員每週 3 筆；Yahoo API 不支援 14d 已省略）
 - [x] 寫 `update_lineup.py`（DB2 今日打線狀態，每小時）
 - [x] 寫 `add_trade_target.py`（交易目標快速加入）
-- [ ] **RPi 部署**
-  - [ ] 確認 RPi Python 版本（需 3.10+）
-  - [ ] git clone 或 rsync 專案到 RPi（`~/fantasy-baseball/`）
-  - [ ] pip install 依賴（`yahoo-fantasy-api yahoo_oauth requests`）
-  - [ ] scp `oauth2.json` 到 RPi 的 `~/fantasy-baseball/`（勿 commit）
-  - [ ] 在 RPi 建立 `~/.config/notion/api_key_new`，貼上 Notion API key
-  - [ ] 手動逐一執行 4 支 sync 腳本確認正常（roster → schedule → stats → lineup）
-  - [ ] 設定 cron job（注意路徑要用 `sync/` 前綴，非 notion-plan.md 舊路徑）
-  - [ ] 等第一次 cron 自動跑後確認 Notion 資料有更新
+- [x] **RPi 部署**
+  - [x] 確認 RPi Python 版本（需 3.10+）→ Python 3.11.2 ✓
+  - [x] git clone 或 rsync 專案到 RPi（`~/fantasy-baseball/`）
+  - [x] pip install 依賴（`yahoo-fantasy-api yahoo_oauth requests`）→ venv 建在 ~/fantasy-baseball/venv/
+  - [x] scp `oauth2.json` 到 RPi 的 `~/fantasy-baseball/`（勿 commit）
+  - [x] 在 RPi 建立 `~/.config/notion/api_key_new`，貼上 Notion API key
+  - [x] 手動逐一執行 4 支 sync 腳本確認正常（roster → schedule → stats → lineup）→ 全數通過（25/182/78/2更新）
+  - [x] sync.log 執行紀錄（每次執行 append 一行，crash 記 ERROR，`tail sync.log` 查看）
+  - [x] 設定 cron job（時區 JST，週一 9:00 全量更新，22:00–08:00 每小時打線更新）
+  - [x] 等第一次 cron 自動跑後確認 Notion 資料有更新（下週一 2026-04-13 09:00 JST）→ 全數通過（roster 25/schedule 182/stats 78）
+
+### 陣容自動換人（Playwright）
+- [x] Step 1：Playwright 登入模組（sync/yahoo_playwright.py，session 存 yahoo_session.json）
+- [x] Step 1.5：換人機制破解（隱藏 SELECT + POST form，已實測成功）
+- [ ] Step 2：swap_logic.py（OUT 偵測 → BN 候補排名 → swap 清單）
+- [ ] Step 3：auto_swap.py（整合 Playwright + swap 邏輯，寫入 sync.log）
+- [ ] Step 4：整合進 cron（update_lineup 之後觸發 auto_swap）
+- [ ] Step 5：投手策略（依本週 H2H 領先程度決定是否保護 ERA/WHIP）
 
 ### 其他功能
 - [ ] 投手陣容對戰表（上場日、對手打線強度）
-- [ ] 測試寫入：調整先發名單
 
 ## 規格確認
 

@@ -40,6 +40,30 @@ fantasy-baseball/
 └── README.md
 ```
 
+## 執行紀錄
+
+每支 sync 腳本執行後會 append 一行到 `sync.log`：
+
+```
+2026-04-12 21:55 JST [update_roster] 25 成功 / 0 失敗
+2026-04-12 21:47 JST [update_stats] 78 成功 / 0 失敗
+2026-04-12 21:48 JST [update_lineup] 2 更新 / 24 無變動 / 0 失敗
+```
+
+查看最近紀錄：
+```bash
+tail ~/fantasy-baseball/sync.log
+```
+
+crash 時記 `ERROR: <訊息>`，方便排查。
+
+## Cron 排程（RPi，時區 JST）
+
+| 時間 | 腳本 | 說明 |
+|------|------|------|
+| 每週一 09:00 | roster → schedule → stats | 陣容 / 賽程 / 統計全量更新 |
+| 每日 22:00–翌日 08:00，每小時整點 | lineup | 打線狀態更新 |
+
 ## 常用指令
 
 ```bash
@@ -90,6 +114,59 @@ python3.12 sync/add_trade_target.py --id 8967
 - `README.md`（結構或指令有異動時）
 - `todo.md`（完成打勾、新增待辦）
 - `notion-plan.md`（架構設計有異動時）
+
+## 陣容自動換人（開發中）
+
+Yahoo Fantasy API 不開放 Write scope，陣容寫入改走 Playwright 瀏覽器自動化。
+
+| 腳本 | 說明 |
+|------|------|
+| `sync/yahoo_playwright.py` | Yahoo 登入模組，session 存 yahoo_session.json |
+| `sync/swap_logic.py` | OUT 偵測 → BN 候補排名 → swap 清單（依 7d 數據） |
+| `sync/auto_swap.py` | Playwright 執行換人，整合進每小時 cron |
+
+流程：`update_lineup.py` 偵測到 OUT → `auto_swap.py` 自動換上 BN 最佳候補
+
+### Playwright 換人機制
+
+Yahoo Fantasy 陣容頁 `/b1/171948/3` 內有隱藏 POST form：
+
+```
+action = /b1/171948/3/editroster
+method = post
+hidden fields:
+  date   = YYYY-MM-DD（ET 日期）
+  crumb  = <CSRF token，每次載入頁面不同>
+  stat1  = S
+  stat2  = D
+  jsubmit = Save Changes
+```
+
+每個球員對應一個隱藏 `<select name="{player_id}">`，value 為當前守位。
+換人步驟：
+
+```python
+# 1. 導 /b1/171948 暖身（避免被導回首頁）
+# 2. 導 /b1/171948/3，等 domcontentloaded + 3s
+# 3. 讀所有 SELECT：name=player_id, value=守位, options=可用守位
+# 4. JS 改值（SELECT 是隱藏的，不能用 select_option）
+await page.evaluate("""() => {
+    document.querySelector("select[name='10621']").value = '1B';
+    document.querySelector("select[name='10748']").value = 'BN';
+}""")
+# 5. 送出 form
+await page.evaluate("document.querySelector(\"form[action*='editroster']\").submit()")
+```
+
+### 初次登入（存 session）
+
+```bash
+# Mac（有頭模式，完成 Yahoo 登入含 2FA 後自動存 session）
+python3.12 sync/yahoo_playwright.py
+
+# RPi 部署：在 Mac 登入後 scp session 過去
+scp yahoo_session.json pi@pi5-1.local:~/fantasy-baseball/
+```
 
 ## 注意事項
 
