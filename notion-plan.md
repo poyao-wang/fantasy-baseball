@@ -11,7 +11,7 @@ flowchart TD
 
     subgraph RPi["Raspberry Pi（自動化）"]
         S1["cron: 每週一 9am JST\nupdate_roster.py\nupdate_schedule.py\nupdate_stats.py"]
-        S2["cron: 每小時 22:00–08:00 JST\nupdate_lineup.py"]
+        S2["cron: 每小時 22:00–08:00 JST\nupdate_lineup.py\n（DB1 Current_Slot + DB2 Lineup_Status）"]
         S3["手動觸發\nadd_trade_target.py\n（加入觀察球員時）"]
     end
 
@@ -137,7 +137,7 @@ flowchart TD
 | `update_roster.py` | 每週一 / 手動 | 從 Yahoo API 拉自己陣容，upsert DB1 |
 | `update_schedule.py` | 每週一 | 建立 DB1 所有球員的當週 DB2 rows |
 | `update_stats.py` | 每週一 | 從 Yahoo API 拉數據，upsert DB3 |
-| `update_lineup.py` | 每小時 22–08 JST | 只更新 DB2 今日 Lineup_Status |
+| `update_lineup.py` | 每小時 22–08 JST | Yahoo API 同步 DB1 Current_Slot + MLB API 更新 DB2 今日 Lineup_Status |
 | `add_trade_target.py` | 手動 | 輸入球員姓名 → 查 Yahoo API → upsert DB1 + 建立 DB2 本週賽程 |
 
 ---
@@ -180,6 +180,47 @@ flowchart TD
 | DB3 Stats | `d3de639b-94af-44e3-9795-9ac965bb5419` |
 
 詳細設定見 `notion_config.py`。
+
+---
+
+---
+
+## 陣容自動換人（Playwright）
+
+Yahoo Fantasy API 不開放 Write scope 給一般開發者，陣容寫入改走 Playwright 瀏覽器自動化。
+
+### 架構
+
+```
+update_lineup.py（每小時）
+  → 更新 DB2 Lineup_Status（IN/OUT/TBD/OFF）
+
+auto_swap.py（update_lineup 之後手動或 cron）
+  ├── swap_logic.py：決定換誰
+  │     - 讀 DB1 Default_Slot（預設先發，Notion 管理）
+  │     - 找出 Default_Slot 在先發格且今日 OFF 或 OUT 的球員
+  │     - 從 BN 找今日 IN/TBD、能守該位置的候補
+  │     - 多人競爭 → 依 DB3 7d 評分排名
+  │     - Util 格接受任意打者
+  │     - 產生 swap 清單（in=None 代表無可用替補）
+  └── Playwright：執行換人
+        - 載入 yahoo_session.json（session cookie）
+        - 陣容頁讀取隱藏 SELECT
+        - 批次 JS 設值，一次 form submit
+        - 結果寫入 sync.log
+        - 支援 --dry-run 試算模式
+```
+
+**DB1 新欄位：Default_Slot**（Select，選項同 Current_Slot）
+- 含義：健康狀態下該球員的預設守位，由使用者在 Notion 管理
+- 初始化：`sync/setup_default_slot.py`（從 Current_Slot 複製，一次性執行）
+- 不會被自動 sync 覆蓋，換人後仍維持原設定
+
+### 投手策略（後續階段）
+
+依本週 H2H 累積數據決定是否保護 ERA / WHIP：
+- 若 ERA / WHIP 已大幅領先對手，且 K / W 類別也贏 → 將預定先發投手移至 BN，避免數據惡化
+- 判斷依據：當週剩餘天數 + 各類別領先差距
 
 ---
 

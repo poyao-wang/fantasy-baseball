@@ -40,6 +40,10 @@
 2026-04-13 [Script] sync/yahoo_playwright.py — Playwright 登入模組。第一次執行有頭瀏覽器讓使用者完成 Yahoo 登入（含 2FA），wait_for_url 自動偵測登入完成，存 session 到 yahoo_session.json（gitignore）。之後 headless 載入 session，自動驗證有效性。提供 get_context() / cleanup() 供其他腳本 import。
 2026-04-13 [Research] Playwright 換人機制完全破解。Yahoo Fantasy 陣容管理頁（/b1/171948/3）有一個隱藏 POST form（action=/b1/171948/3/editroster）。form 內每個球員對應一個隱藏 SELECT，name=Yahoo player_id（數字），value=當前守位。換人方式：JS 直接設 SELECT.value → form.submit()。hidden fields：date（ET 日期）、crumb（CSRF token，每次載入不同）、stat1=S、stat2=D、jsubmit=Save Changes。
 2026-04-13 [Test] Playwright 換人實測成功。Guerrero Jr.（pid=10621）BN→1B，Caratini（pid=10748）1B→BN。POST 回傳 200，頁面即時更新確認。整套流程：載入 session → 導 /b1/171948 暖身 → 導 /b1/171948/3 → 讀 SELECT → JS 改值 → form.submit()。
+2026-04-14 [Feature] DB1 新增 Default_Slot 欄位（sync/setup_default_slot.py），從 Current_Slot 初始化 25 人，供換人邏輯判斷預設先發位置，Notion 端手動管理。
+2026-04-14 [Script] sync/swap_logic.py — 打者換人邏輯：偵測 Default_Slot 在先發格且今日 OFF/OUT 的球員，從 BN 找能守該位置且今日 IN/TBD 的替補，依 DB3 7d 評分排名，產生 swap 清單（in=None 代表無替補可用）。
+2026-04-14 [Script] sync/auto_swap.py — 整合 swap_logic + Playwright 執行換人。支援 --dry-run 試算，正式執行一次批次 form submit，結果寫入 sync.log。
+2026-04-14 [Test] auto_swap 端對端實測成功：Guerrero Jr.（TOR 今日無賽 → OFF）自動換下至 BN，Caratini 補上 1B。POST 200，頁面即時更新確認。打者自動換人機制完整上線。
 
 ---
 
@@ -80,3 +84,5 @@
 2026-04-13  Yahoo API Write scope 調查完畢。fspt-w scope 對一般開發者不開放，兩個 App 均確認無法寫入陣容。改走 Playwright 瀏覽器自動化。設計：update_lineup.py 偵測 OUT → auto_swap.py 執行換人（Playwright + 7d 數據排名）。打者先做，投手策略（依 H2H 本週領先保護 ERA/WHIP）下一階段加入。
 
 2026-04-13  Playwright 換人機制完全破解並實測成功。關鍵發現：Yahoo Fantasy 陣容頁（/b1/171948/3）有隱藏 POST form（action=/b1/171948/3/editroster），每個球員對應一個隱藏 SELECT（name=player_id, value=守位）。換人步驟：① 導 /b1/171948 暖身 → ② 導 /b1/171948/3 等 DOM 載入 → ③ 讀各 SELECT 取球員名、player_id、當前守位、可選守位 → ④ JS 設 SELECT.value → ⑤ form.submit() POST 到 editroster。實測：Guerrero Jr. BN→1B、Caratini 1B→BN，POST 200，頁面即時更新。已建 sync/yahoo_playwright.py（session 管理）、sync/_test_swap.py（探索腳本，可刪）。
+
+2026-04-14  打者自動換人完整實作並驗證。新增 Default_Slot 到 DB1（Notion 管理預設先發，setup_default_slot.py 一鍵初始化）。swap_logic.py 偵測今日 OFF/OUT 的預設先發，從 BN 依 7d 評分找最佳替補（位置固定格先配，Util 最後配任意打者）。auto_swap.py 整合 Playwright 一次批次換人，支援 --dry-run 試算。端對端實測：Guerrero Jr.（TOR 今日無賽）自動換下，Caratini 補上 1B 成功。下一步整合進 cron。

@@ -24,6 +24,7 @@
 - [x] 寫 `update_schedule.py`（DB2 當週賽程）
 - [x] 寫 `update_stats.py`（DB3 區間快照：7d / 30d / season，每球員每週 3 筆；Yahoo API 不支援 14d 已省略）
 - [x] 寫 `update_lineup.py`（DB2 今日打線狀態，每小時）
+- [x] `update_lineup.py` 加入 DB1 Current_Slot 即時同步（輪值調動每小時反映，不等週一）
 - [x] 寫 `add_trade_target.py`（交易目標快速加入）
 - [x] **RPi 部署**
   - [x] 確認 RPi Python 版本（需 3.10+）→ Python 3.11.2 ✓
@@ -39,9 +40,17 @@
 ### 陣容自動換人（Playwright）
 - [x] Step 1：Playwright 登入模組（sync/yahoo_playwright.py，session 存 yahoo_session.json）
 - [x] Step 1.5：換人機制破解（隱藏 SELECT + POST form，已實測成功）
-- [ ] Step 2：swap_logic.py（OUT 偵測 → BN 候補排名 → swap 清單）
-- [ ] Step 3：auto_swap.py（整合 Playwright + swap 邏輯，寫入 sync.log）
+- [x] Step 2：swap_logic.py（OFF/OUT 偵測 → BN 候補排名 → swap 清單，依 DB3 7d 評分）
+- [x] Step 3：auto_swap.py（整合 Playwright + swap 邏輯，支援 --dry-run，寫入 sync.log）
 - [ ] Step 4：整合進 cron（update_lineup 之後觸發 auto_swap）
+  - [ ] RPi 安裝 Playwright 及 Chromium（`pip install playwright && playwright install chromium`）
+  - [ ] Mac 重新登入存 session（`python3.12 sync/yahoo_playwright.py`）
+  - [ ] scp `yahoo_session.json` 到 RPi（`scp yahoo_session.json pi@pi5-1.local:~/fantasy-baseball/`）
+  - [ ] git pull 最新腳本到 RPi
+  - [ ] RPi 手動測試 `auto_swap.py --dry-run` 確認正常
+  - [ ] 更新 RPi cron：`update_lineup.py && auto_swap.py`
+  - [ ] 等下次 cron 自動觸發後確認 sync.log 有換人紀錄
+  - [ ] 說明 session 過期處理流程（Mac 重新登入 → scp → RPi 自動恢復）
 - [ ] Step 5：投手策略（依本週 H2H 領先程度決定是否保護 ERA/WHIP）
 
 ### 其他功能

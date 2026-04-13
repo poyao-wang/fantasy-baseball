@@ -44,6 +44,17 @@ output/     輸出 md 檔（自動產生，不進 git）
 
 日期基準為美東時間（ET）。人在日本執行時自動校正。
 
+## Agent Inbox
+
+說「agent inbox」時，將本 session 的重要進展寫入：
+`/Users/poyaowang/Documents/projects/life-os/data/agent-inbox.md`
+
+格式：在檔案最上方插入一筆（新的在前）：
+```
+## YYYY-MM-DD HH:MM [fantasy-baseball] {標題}
+{1–3 行摘要，說明做了什麼、現在狀態、下一步}
+```
+
 ## 溝通
 
 繁體中文，口語輕鬆，簡潔不廢話。
