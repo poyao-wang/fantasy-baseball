@@ -10,15 +10,16 @@ flowchart TD
     end
 
     subgraph RPi["Raspberry Pi（自動化）"]
-        S1["cron: 每週一 9am JST\nupdate_roster.py\nupdate_schedule.py\nupdate_stats.py"]
-        S2["cron: 每小時 22:00–08:00 JST\nupdate_lineup.py\n（DB1 Current_Slot + DB2 Lineup_Status）"]
+        S1["cron: 每週一 9am JST\nupdate_roster.py\nupdate_schedule.py\nupdate_stats.py\nsync_log.py"]
+        S2["cron: 每小時 22:00–08:00 JST\nupdate_lineup.py → auto_swap.py → sync_log.py"]
         S3["手動觸發\nadd_trade_target.py\n（加入觀察球員時）"]
     end
 
     subgraph Notion["Notion DB"]
-        DB1[("DB1: Players\n所有球員\nMy Roster + Trade Target")]
-        DB2[("DB2: Schedule\n每日賽況")]
-        DB3[("DB3: Stats\n區間快照 7d/14d/30d/season")]
+        DB1[("Fantasy Roster\n所有球員\nMy Roster + Trade Target")]
+        DB2[("Fantasy Schedule\n每日賽況")]
+        DB3[("Fantasy Stats\n區間快照 7d/30d/season")]
+        DB4[("Fantasy Sync Log\n腳本執行紀錄")]
     end
 
     subgraph Views["Notion View（查閱用）"]
@@ -36,8 +37,10 @@ flowchart TD
     Y -->|target player info| S3
     S1 -->|upsert| DB1
     S1 -->|建立當週 rows| DB2
-    S1 -->|upsert 區間快照 x4| DB3
-    S2 -->|更新 Lineup_Status| DB2
+    S1 -->|upsert 區間快照 x3| DB3
+    S1 -->|sync_log| DB4
+    S2 -->|更新 Lineup_Status + auto_swap| DB2
+    S2 -->|sync_log| DB4
     S3 -->|upsert| DB1
     S3 -->|建立賽程 rows| DB2
     DB1 --> V1
@@ -55,7 +58,7 @@ flowchart TD
 
 ## DB 設計
 
-### DB1：Players（所有球員）
+### DB1：Fantasy Roster（所有球員）
 
 自己的陣容 + 潛力交易目標統一放這裡，用 `Player_Type` 區分
 
@@ -76,7 +79,7 @@ flowchart TD
 
 ---
 
-### DB2：Schedule（每日賽況）
+### DB2：Fantasy Schedule（每日賽況）
 
 自己的球員 + Trade Target 都有賽程，方便比較誰這週出賽多
 
@@ -95,7 +98,7 @@ flowchart TD
 
 ---
 
-### DB3：Stats（區間快照數據）
+### DB3：Fantasy Stats（區間快照數據）
 
 每週一更新，每個球員每週存 3 筆（3 個時間窗），用來對比交易目標與自己球員的數據。
 累積數據到中後期參考價值低，改用區間快照才能反映當下狀態與趨勢。
@@ -175,9 +178,10 @@ flowchart TD
 | Workspace | 新 Workspace（第二個） |
 | API Key | `~/.config/notion/api_key_new` |
 | Parent page | `34048ad3-2a1c-80a0-bcaa-ca973c2d4100` |
-| DB1 Players | `1eb4bb64-da35-4e9d-b740-f36c8569d3a6` |
-| DB2 Schedule | `4bf3af3c-7095-493a-8746-5ad0fc9f147f` |
-| DB3 Stats | `d3de639b-94af-44e3-9795-9ac965bb5419` |
+| Fantasy Roster | `1eb4bb64-da35-4e9d-b740-f36c8569d3a6` |
+| Fantasy Schedule | `4bf3af3c-7095-493a-8746-5ad0fc9f147f` |
+| Fantasy Stats | `d3de639b-94af-44e3-9795-9ac965bb5419` |
+| Fantasy Sync Log | `34148ad3-2a1c-8141-ace0-df0667ecc04d` |
 
 詳細設定見 `notion_config.py`。
 

@@ -43,13 +43,13 @@
 - [x] Step 2：swap_logic.py（OFF/OUT 偵測 → BN 候補排名 → swap 清單，依 DB3 7d 評分）
 - [x] Step 3：auto_swap.py（整合 Playwright + swap 邏輯，支援 --dry-run，寫入 sync.log）
 - [ ] Step 4：整合進 cron（update_lineup 之後觸發 auto_swap）
-  - [ ] RPi 安裝 Playwright 及 Chromium（`pip install playwright && playwright install chromium`）
-  - [ ] Mac 重新登入存 session（`python3.12 sync/yahoo_playwright.py`）
-  - [ ] scp `yahoo_session.json` 到 RPi（`scp yahoo_session.json pi@pi5-1.local:~/fantasy-baseball/`）
-  - [ ] git pull 最新腳本到 RPi
-  - [ ] RPi 手動測試 `auto_swap.py --dry-run` 確認正常
-  - [ ] 更新 RPi cron：`update_lineup.py && auto_swap.py`
-  - [ ] 等下次 cron 自動觸發後確認 sync.log 有換人紀錄
+  - [x] RPi 安裝 Playwright 及 Chromium（`pip install playwright && playwright install chromium`）
+  - [x] Mac 重新登入存 session（`python3.12 sync/yahoo_playwright.py`）
+  - [x] scp `yahoo_session.json` 到 RPi（`scp yahoo_session.json pi@pi5-1.local:~/fantasy-baseball/`）
+  - [x] git pull 最新腳本到 RPi
+  - [x] RPi 手動測試 `auto_swap.py --dry-run` 確認正常
+  - [x] 更新 RPi cron：`update_lineup.py && auto_swap.py`
+  - [ ] 等下次 cron 自動觸發後確認 sync.log 有換人紀錄（22:00 JST 後執行：`ssh pi@pi5-1.local "tail ~/fantasy-baseball/sync.log"`，確認有 [auto_swap] 那行）
   - [ ] 說明 session 過期處理流程（Mac 重新登入 → scp → RPi 自動恢復）
 - [ ] Step 5：投手策略（依本週 H2H 領先程度決定是否保護 ERA/WHIP）
 

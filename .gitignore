@@ -5,3 +5,5 @@ output/
 __pycache__/
 *.pyc
 .env
+sync.log
+sync/_test_swap.py

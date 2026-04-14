@@ -24,11 +24,16 @@ fantasy-baseball/
 │   └── fetch_league_info.py    抓取聯盟靜態資訊
 ├── sync/                 # Notion 同步腳本（RPi cron 用）
 │   ├── notion_config.py        Notion DB IDs 設定
-│   ├── update_roster.py        陣容 upsert → Notion DB1 Players
-│   ├── update_schedule.py      當週賽程 upsert → Notion DB2 Schedule（每球員×7天）
-│   ├── update_lineup.py        Current_Slot 同步 → DB1 + 今日打線狀態 → DB2 Lineup_Status（每小時）
-│   ├── update_stats.py         區間統計快照 upsert → Notion DB3 Stats（7d/30d/season）
-│   └── add_trade_target.py     交易目標一鍵加入（DB1 + DB2 本週賽程 + DB3 統計）
+│   ├── update_roster.py        陣容 upsert → Fantasy Roster（每週一）
+│   ├── update_schedule.py      當週賽程 upsert → Fantasy Schedule（每球員×7天，每週一）
+│   ├── update_lineup.py        Current_Slot 同步 → Fantasy Roster + 今日打線狀態 → Fantasy Schedule（每小時）
+│   ├── update_stats.py         區間統計快照 upsert → Fantasy Stats（7d/30d/season，每週一）
+│   ├── add_trade_target.py     交易目標一鍵加入（Fantasy Roster + Schedule + Stats）
+│   ├── yahoo_playwright.py     Yahoo 登入模組，session 存 yahoo_session.json
+│   ├── setup_default_slot.py   Fantasy Roster Default_Slot 初始化（一次性）
+│   ├── swap_logic.py           OFF/OUT 偵測 → BN 候補依 7d 評分排名 → swap 清單
+│   ├── auto_swap.py            Playwright 執行換人，支援 --dry-run，結果寫入 sync.log
+│   └── sync_log.py             sync.log → Fantasy Sync Log（每次 cron 末尾）
 ├── data/                 # 靜態資料
 │   └── league_info.json        聯盟設定、積分類別、球隊列表
 ├── cache/                # 當日 API 快取（自動產生）
@@ -62,8 +67,8 @@ crash 時記 `ERROR: <訊息>`，方便排查。
 
 | 時間 | 腳本 | 說明 |
 |------|------|------|
-| 每週一 09:00 | roster → schedule → stats | 陣容 / 賽程 / 統計全量更新 |
-| 每日 22:00–翌日 08:00，每小時整點 | lineup | 打線狀態更新 |
+| 每週一 09:00 | roster → schedule → stats → sync_log | 陣容 / 賽程 / 統計全量更新 |
+| 每日 22:00–翌日 08:00，每小時整點 | lineup → auto_swap → sync_log | 打線更新 + 自動換人 |
 
 ## 常用指令
 
@@ -92,9 +97,12 @@ python3.12 sync/update_lineup.py
 # 區間統計快照 upsert → Notion DB3 Stats（每週一 / 手動）
 python3.12 sync/update_stats.py
 
-# 新增交易目標（DB1 + DB2 本週賽程 + DB3 統計）
+# 新增交易目標（Fantasy Roster + Schedule + Stats）
 python3.12 sync/add_trade_target.py "Jose Altuve"
 python3.12 sync/add_trade_target.py --id 8967
+
+# sync.log → Notion Fantasy Sync Log（通常由 cron 自動觸發）
+python3.12 sync/sync_log.py
 ```
 
 ## Lineup_Status 說明
@@ -116,14 +124,14 @@ python3.12 sync/add_trade_target.py --id 8967
 - `todo.md`（完成打勾、新增待辦）
 - `notion-plan.md`（架構設計有異動時）
 
-## 陣容自動換人（開發中）
+## 陣容自動換人
 
 Yahoo Fantasy API 不開放 Write scope，陣容寫入改走 Playwright 瀏覽器自動化。
 
 | 腳本 | 說明 |
 |------|------|
 | `sync/yahoo_playwright.py` | Yahoo 登入模組，session 存 yahoo_session.json |
-| `sync/setup_default_slot.py` | DB1 新增 Default_Slot 欄位並從 Current_Slot 初始化（一次性） |
+| `sync/setup_default_slot.py` | Fantasy Roster Default_Slot 初始化（一次性） |
 | `sync/swap_logic.py` | OFF/OUT 偵測 → BN 候補依 7d 評分排名 → swap 清單 |
 | `sync/auto_swap.py` | Playwright 執行換人，支援 --dry-run，結果寫入 sync.log |
 

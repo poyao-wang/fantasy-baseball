@@ -44,6 +44,10 @@
 2026-04-14 [Script] sync/swap_logic.py — 打者換人邏輯：偵測 Default_Slot 在先發格且今日 OFF/OUT 的球員，從 BN 找能守該位置且今日 IN/TBD 的替補，依 DB3 7d 評分排名，產生 swap 清單（in=None 代表無替補可用）。
 2026-04-14 [Script] sync/auto_swap.py — 整合 swap_logic + Playwright 執行換人。支援 --dry-run 試算，正式執行一次批次 form submit，結果寫入 sync.log。
 2026-04-14 [Test] auto_swap 端對端實測成功：Guerrero Jr.（TOR 今日無賽 → OFF）自動換下至 BN，Caratini 補上 1B。POST 200，頁面即時更新確認。打者自動換人機制完整上線。
+2026-04-14 [Deploy] RPi 安裝 Playwright 1.58.0 + Chromium ARM64（179MB），scp yahoo_session.json，git pull，RPi dry-run 驗證正常。
+2026-04-14 [Cron] RPi cron 更新：每小時 update_lineup → auto_swap → sync_log；週一全量末尾加 sync_log。
+2026-04-14 [Feature] sync/sync_log.py — sync.log 同步到 Notion Fantasy Sync Log（DB4）。upsert key=timestamp+script title，status OK/ERROR 自動判斷。本機測試 5 新增 / 1 略過，正常。
+2026-04-14 [Notion] 四個 DB 統一改名加 Fantasy 前綴：Fantasy Roster / Fantasy Schedule / Fantasy Stats / Fantasy Sync Log（📋）。notion_config.py 加入 DB_LOGS。
 
 ---
 
@@ -86,3 +90,5 @@
 2026-04-13  Playwright 換人機制完全破解並實測成功。關鍵發現：Yahoo Fantasy 陣容頁（/b1/171948/3）有隱藏 POST form（action=/b1/171948/3/editroster），每個球員對應一個隱藏 SELECT（name=player_id, value=守位）。換人步驟：① 導 /b1/171948 暖身 → ② 導 /b1/171948/3 等 DOM 載入 → ③ 讀各 SELECT 取球員名、player_id、當前守位、可選守位 → ④ JS 設 SELECT.value → ⑤ form.submit() POST 到 editroster。實測：Guerrero Jr. BN→1B、Caratini 1B→BN，POST 200，頁面即時更新。已建 sync/yahoo_playwright.py（session 管理）、sync/_test_swap.py（探索腳本，可刪）。
 
 2026-04-14  打者自動換人完整實作並驗證。新增 Default_Slot 到 DB1（Notion 管理預設先發，setup_default_slot.py 一鍵初始化）。swap_logic.py 偵測今日 OFF/OUT 的預設先發，從 BN 依 7d 評分找最佳替補（位置固定格先配，Util 最後配任意打者）。auto_swap.py 整合 Playwright 一次批次換人，支援 --dry-run 試算。端對端實測：Guerrero Jr.（TOR 今日無賽）自動換下，Caratini 補上 1B 成功。下一步整合進 cron。
+
+2026-04-14  Step 4 完成。RPi 安裝 Playwright + Chromium ARM64，scp session，git pull，RPi dry-run 正常（Vlad Jr OFF→無替補，邏輯正確）。cron 更新：update_lineup → auto_swap → sync_log（每小時），週一全量末尾加 sync_log。新增 sync_log.py，把 sync.log 同步到 Notion Fantasy Sync Log（DB4）。Notion 四個 DB 統一改名加 Fantasy 前綴。今晚 22:00 JST 等候第一次 cron 自動觸發確認。
