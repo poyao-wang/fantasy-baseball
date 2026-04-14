@@ -115,16 +115,17 @@ async def execute_swaps_async(swaps: list[dict]) -> tuple[int, int]:
                 continue
 
             if out_info:
-                out_pid  = str(out_info["player_id"])
-                out_name = out_info["name"]
+                out_pid   = str(out_info["player_id"])
+                out_name  = out_info["name"]
+                out_slot  = swap.get("out_slot", "BN")
                 if out_pid not in available_map:
                     print(f"  [跳過] {out_name} (pid={out_pid}) 不在 SELECT 清單")
                     fail += 1
                     continue
                 js_lines.append(
-                    f"document.querySelector(\"select[name='{out_pid}']\").value = 'BN';"
+                    f"document.querySelector(\"select[name='{out_pid}']\").value = '{out_slot}';"
                 )
-                print(f"  {slot:<6}  {out_name:<28} → BN{tag}")
+                print(f"  {slot:<6}  {out_name:<28} → {out_slot}{tag}")
             else:
                 out_name = "(空格)"
                 print(f"  {slot:<6}  (空格){tag}")

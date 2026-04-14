@@ -1,9 +1,15 @@
 """
 swap_logic.py — 打者換人邏輯（batters only）
 
-兩階段邏輯：
+三階段邏輯：
 
-Phase 1 — Restore（換回）
+Phase 0 — Rebalance（先發格對調）
+  條件：Default_Slot 在先發格，但 Current_Slot 也是先發格且與 Default_Slot 不同，
+        且對應的位置有另一位互換錯位的球員（互相持有對方的 Default_Slot）
+  行動：兩人直接對調到各自的 Default_Slot，不經過 BN。
+  Swap dict 多一個欄位：out_slot（out 球員的目標格，非 BN）
+
+Phase 1 — Restore（從 BN 換回）
   條件：Default_Slot 在先發格，且目前在 BN，且今日 IN/TBD
   行動：找出「佔著該格但 Default_Slot 不是該格」的球員（intruder），
         把 intruder 換下 BN，把原主人換回預設位。
@@ -14,10 +20,11 @@ Phase 2 — Replace（替補）
 
 Swap dict 結構：
 {
-    "slot": "1B",
-    "out": {"player_id": int, "name": str, "current_slot": str} | None,
-    "in":  {"player_id": int, "name": str, "current_slot": "BN"} | None,
-    "restore": bool,   # True = Phase 1 換回，False = Phase 2 替補
+    "slot":     "1B",          # in 球員的目標格
+    "out":      {"player_id": int, "name": str, "current_slot": str} | None,
+    "out_slot": str,           # out 球員的目標格（通常是 "BN"，Phase 0 時為其 Default_Slot）
+    "in":       {"player_id": int, "name": str, "current_slot": str} | None,
+    "restore":  bool,          # True = Phase 0/1，False = Phase 2
 }
 in = None 代表找不到可用替補（不執行換人，僅回報）
 out = None 代表格子是空的（理論上不會發生，防禦性處理）
@@ -188,8 +195,54 @@ def compute_swap_plan(
         })
 
     swaps: list[dict] = []
+    rebalanced_ids: set[int] = set()  # Phase 0 已處理的球員
     displaced_ids: set[int] = set()   # Phase 1 換下到 BN 的球員
     restored_ids: set[int] = set()    # Phase 1 換回先發的球員
+
+    # ── Phase 0: Rebalance（先發格對調）──────────────────────
+    # 找出 Default ≠ Current，且兩者都在先發格，且今日可上場
+    misplaced = [
+        {
+            "player_id": pid,
+            "name": info["name"],
+            "default_slot": info["default_slot"],
+            "current_slot": info["current_slot"],
+            "score": scores.get(pid, 0.0),
+        }
+        for pid, info in batters.items()
+        if info["default_slot"] in STARTING_SLOTS
+        and info["current_slot"] in STARTING_SLOTS
+        and info["default_slot"] != info["current_slot"]
+        and info["status"] != "IL"
+        and info["today_status"] in ("IN", "TBD")
+    ]
+
+    for cand in sorted(misplaced, key=lambda x: x["score"], reverse=True):
+        if cand["player_id"] in rebalanced_ids:
+            continue
+        # 找出佔著 cand.default_slot 且 default 是 cand.current_slot 的夥伴（互換錯位）
+        partner = next(
+            (
+                o for o in misplaced
+                if o["player_id"] not in rebalanced_ids
+                and o["player_id"] != cand["player_id"]
+                and o["current_slot"] == cand["default_slot"]
+                and o["default_slot"] == cand["current_slot"]
+            ),
+            None,
+        )
+        if not partner:
+            continue
+        # 一個 swap entry 代表兩人對調
+        swaps.append({
+            "slot":     cand["default_slot"],      # cand 的目標格
+            "out":      {"player_id": partner["player_id"], "name": partner["name"], "current_slot": partner["current_slot"]},
+            "out_slot": partner["default_slot"],   # partner 的目標格（非 BN）
+            "in":       {"player_id": cand["player_id"], "name": cand["name"], "current_slot": cand["current_slot"]},
+            "restore":  True,
+        })
+        rebalanced_ids.add(cand["player_id"])
+        rebalanced_ids.add(partner["player_id"])
 
     # ── Phase 1: Restore（換回）─────────────────────────────
     # 條件：Default_Slot 在先發格 且 Current_Slot = BN 且 今日 IN/TBD 且 非 IL
@@ -207,6 +260,7 @@ def compute_swap_plan(
             and info["current_slot"] == "BN"
             and info["status"] != "IL"
             and info["today_status"] in ("IN", "TBD")
+            and pid not in rebalanced_ids
         ],
         key=lambda x: x["score"],
         reverse=True,
@@ -224,10 +278,11 @@ def compute_swap_plan(
         # 踢分數最低的 intruder
         intruder = min(intruders, key=lambda x: x["score"])
         swaps.append({
-            "slot": target,
-            "out": {"player_id": intruder["player_id"], "name": intruder["name"], "current_slot": target},
-            "in":  {"player_id": cand["player_id"], "name": cand["name"], "current_slot": "BN"},
-            "restore": True,
+            "slot":     target,
+            "out":      {"player_id": intruder["player_id"], "name": intruder["name"], "current_slot": target},
+            "out_slot": "BN",
+            "in":       {"player_id": cand["player_id"], "name": cand["name"], "current_slot": "BN"},
+            "restore":  True,
         })
         displaced_ids.add(intruder["player_id"])
         restored_ids.add(cand["player_id"])
@@ -291,17 +346,19 @@ def compute_swap_plan(
             if candidate:
                 assigned_ids.add(candidate["player_id"])
                 swaps.append({
-                    "slot": slot,
-                    "out": empty["out"],
-                    "in": {"player_id": candidate["player_id"], "name": candidate["name"], "current_slot": "BN"},
-                    "restore": False,
+                    "slot":     slot,
+                    "out":      empty["out"],
+                    "out_slot": "BN",
+                    "in":       {"player_id": candidate["player_id"], "name": candidate["name"], "current_slot": "BN"},
+                    "restore":  False,
                 })
             else:
                 swaps.append({
-                    "slot": slot,
-                    "out": empty["out"],
-                    "in": None,
-                    "restore": False,
+                    "slot":     slot,
+                    "out":      empty["out"],
+                    "out_slot": "BN",
+                    "in":       None,
+                    "restore":  False,
                 })
 
     return swaps
@@ -353,11 +410,13 @@ def get_swap_plan(
             print(f"[swap_logic] 需換人 {len(swaps)} 個位子：")
             for s in swaps:
                 out_name = s["out"]["name"] if s["out"] else "(空格)"
+                out_slot = s.get("out_slot", "BN")
                 tag = " [換回]" if s.get("restore") else ""
                 in_info = s["in"]
                 if in_info:
                     score = scores.get(in_info["player_id"], 0)
-                    print(f"  {s['slot']:<6}  OUT {out_name:<28} → IN {in_info['name']:<28} (7d score={score:.1f}){tag}")
+                    out_label = f"{out_name}→{out_slot}"
+                    print(f"  {s['slot']:<6}  OUT {out_label:<36} IN {in_info['name']:<28} (7d={score:.1f}){tag}")
                 else:
                     print(f"  {s['slot']:<6}  OUT {out_name:<28} → （無可用替補）")
         else:
