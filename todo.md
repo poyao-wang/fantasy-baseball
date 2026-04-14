@@ -42,15 +42,20 @@
 - [x] Step 1.5：換人機制破解（隱藏 SELECT + POST form，已實測成功）
 - [x] Step 2：swap_logic.py（OFF/OUT 偵測 → BN 候補排名 → swap 清單，依 DB3 7d 評分）
 - [x] Step 3：auto_swap.py（整合 Playwright + swap 邏輯，支援 --dry-run，寫入 sync.log）
-- [ ] Step 4：整合進 cron（update_lineup 之後觸發 auto_swap）
+- [x] Step 4：整合進 cron（update_lineup 之後觸發 auto_swap）
   - [x] RPi 安裝 Playwright 及 Chromium（`pip install playwright && playwright install chromium`）
   - [x] Mac 重新登入存 session（`python3.12 sync/yahoo_playwright.py`）
   - [x] scp `yahoo_session.json` 到 RPi（`scp yahoo_session.json pi@pi5-1.local:~/fantasy-baseball/`）
   - [x] git pull 最新腳本到 RPi
   - [x] RPi 手動測試 `auto_swap.py --dry-run` 確認正常
   - [x] 更新 RPi cron：`update_lineup.py && auto_swap.py`
-  - [ ] 等下次 cron 自動觸發後確認 sync.log 有換人紀錄（22:00 JST 後執行：`ssh pi@pi5-1.local "tail ~/fantasy-baseball/sync.log"`，確認有 [auto_swap] 那行）
+  - [x] cron 自動觸發確認（22:00 JST，sync.log 有 [auto_swap] 紀錄）
   - [ ] 說明 session 過期處理流程（Mac 重新登入 → scp → RPi 自動恢復）
+- [x] Step 4.5：swap_logic 換回邏輯修正
+  - [x] Phase 0 Rebalance：先發格互換錯位（Riley↔Muncy）直接對調
+  - [x] Phase 1 Restore：Default_Slot 在先發格但滯留 BN 者換回（Vlad Jr.→1B）
+  - [x] auto_swap.py 支援 out_slot 非 BN
+  - [x] RPi 實測三個換人全部成功
 - [ ] Step 5：投手策略（依本週 H2H 領先程度決定是否保護 ERA/WHIP）
 
 ### 其他功能

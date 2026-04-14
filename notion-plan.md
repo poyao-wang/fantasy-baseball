@@ -198,19 +198,25 @@ Yahoo Fantasy API 不開放 Write scope 給一般開發者，陣容寫入改走 
 ```
 update_lineup.py（每小時）
   → 更新 DB2 Lineup_Status（IN/OUT/TBD/OFF）
+  → 更新 DB1 Current_Slot（從 Yahoo API 同步）
 
 auto_swap.py（update_lineup 之後手動或 cron）
-  ├── swap_logic.py：決定換誰
-  │     - 讀 DB1 Default_Slot（預設先發，Notion 管理）
-  │     - 找出 Default_Slot 在先發格且今日 OFF 或 OUT 的球員
-  │     - 從 BN 找今日 IN/TBD、能守該位置的候補
-  │     - 多人競爭 → 依 DB3 7d 評分排名
-  │     - Util 格接受任意打者
-  │     - 產生 swap 清單（in=None 代表無可用替補）
+  ├── swap_logic.py：三階段換人邏輯
+  │     Phase 0 — Rebalance（先發格對調）
+  │       - 找出互換錯位的兩人（都在先發格但守著對方的 Default_Slot）
+  │       - 直接對調，不經過 BN
+  │     Phase 1 — Restore（從 BN 換回）
+  │       - 找出 Default_Slot 在先發格但目前在 BN 且今日 IN/TBD 的球員
+  │       - 找佔著該格的 intruder（Default_Slot ≠ 該格），踢去 BN，原主人換回
+  │     Phase 2 — Replace（替補）
+  │       - 找出 Default_Slot 在先發格且今日 OFF/OUT 的球員
+  │       - 從 BN（含 Phase 1 換下的 intruder）找最佳候補補上
+  │       - 依 DB3 7d 評分排名，Util 格接受任意打者
+  │       - in=None 代表無可用替補
   └── Playwright：執行換人
         - 載入 yahoo_session.json（session cookie）
         - 陣容頁讀取隱藏 SELECT
-        - 批次 JS 設值，一次 form submit
+        - 批次 JS 設值，一次 form submit（支援 out_slot 非 BN）
         - 結果寫入 sync.log
         - 支援 --dry-run 試算模式
 ```

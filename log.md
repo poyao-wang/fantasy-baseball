@@ -48,6 +48,8 @@
 2026-04-14 [Cron] RPi cron 更新：每小時 update_lineup → auto_swap → sync_log；週一全量末尾加 sync_log。
 2026-04-14 [Feature] sync/sync_log.py — sync.log 同步到 Notion Fantasy Sync Log（DB4）。upsert key=timestamp+script title，status OK/ERROR 自動判斷。本機測試 5 新增 / 1 略過，正常。
 2026-04-14 [Notion] 四個 DB 統一改名加 Fantasy 前綴：Fantasy Roster / Fantasy Schedule / Fantasy Stats / Fantasy Sync Log（📋）。notion_config.py 加入 DB_LOGS。
+2026-04-14 [Fix] swap_logic.py 新增換回邏輯：Phase 0 Rebalance（先發格互換錯位，如 Riley↔Muncy 直接對調，不經 BN）+ Phase 1 Restore（Default_Slot 在先發格但目前在 BN 者換回，如 Vlad Jr.→1B 踢走 Caratini）。auto_swap.py 新增 out_slot 欄位支援非 BN 目標格。
+2026-04-14 [Test] 三個換人問題全部修正並在 RPi 實測：Vlad Jr.→1B、Muncy→3B、Riley→Util，Notion DB1 Current_Slot 同步更新，Fantasy Sync Log 紀錄正常。
 
 ---
 
@@ -92,3 +94,5 @@
 2026-04-14  打者自動換人完整實作並驗證。新增 Default_Slot 到 DB1（Notion 管理預設先發，setup_default_slot.py 一鍵初始化）。swap_logic.py 偵測今日 OFF/OUT 的預設先發，從 BN 依 7d 評分找最佳替補（位置固定格先配，Util 最後配任意打者）。auto_swap.py 整合 Playwright 一次批次換人，支援 --dry-run 試算。端對端實測：Guerrero Jr.（TOR 今日無賽）自動換下，Caratini 補上 1B 成功。下一步整合進 cron。
 
 2026-04-14  Step 4 完成。RPi 安裝 Playwright + Chromium ARM64，scp session，git pull，RPi dry-run 正常（Vlad Jr OFF→無替補，邏輯正確）。cron 更新：update_lineup → auto_swap → sync_log（每小時），週一全量末尾加 sync_log。新增 sync_log.py，把 sync.log 同步到 Notion Fantasy Sync Log（DB4）。Notion 四個 DB 統一改名加 Fantasy 前綴。今晚 22:00 JST 等候第一次 cron 自動觸發確認。
+
+2026-04-14  swap_logic 換回邏輯修正。原本只有「替補（Replace）」邏輯，缺少換回機制，導致 Vlad Jr. 滯留 BN、Caratini 佔著 1B，以及 Riley↔Muncy 互換錯位問題。新增三階段邏輯：Phase 0 Rebalance（先發格互換對調）、Phase 1 Restore（從 BN 換回預設位）、Phase 2 Replace（原有替補）。auto_swap.py 支援 out_slot 非 BN 情況。RPi 實測三個換人全部成功，Notion 同步正常。
