@@ -95,17 +95,13 @@ async def execute_swaps_async(swaps: list[dict]) -> tuple[int, int]:
         fail = 0
 
         for swap in actionable:
-            out_pid = str(swap["out"]["player_id"])
-            in_pid  = str(swap["in"]["player_id"])
-            slot    = swap["slot"]
-            out_name = swap["out"]["name"]
+            out_info = swap["out"]
+            in_pid   = str(swap["in"]["player_id"])
+            slot     = swap["slot"]
             in_name  = swap["in"]["name"]
+            tag      = " [換回]" if swap.get("restore") else ""
 
-            # 確認兩位球員都在 SELECT 清單裡
-            if out_pid not in available_map:
-                print(f"  [跳過] {out_name} (pid={out_pid}) 不在 SELECT 清單")
-                fail += 1
-                continue
+            # 確認 in_player 在 SELECT 清單裡
             if in_pid not in available_map:
                 print(f"  [跳過] {in_name} (pid={in_pid}) 不在 SELECT 清單")
                 fail += 1
@@ -118,13 +114,24 @@ async def execute_swaps_async(swaps: list[dict]) -> tuple[int, int]:
                 fail += 1
                 continue
 
-            js_lines.append(
-                f"document.querySelector(\"select[name='{out_pid}']\").value = 'BN';"
-            )
+            if out_info:
+                out_pid  = str(out_info["player_id"])
+                out_name = out_info["name"]
+                if out_pid not in available_map:
+                    print(f"  [跳過] {out_name} (pid={out_pid}) 不在 SELECT 清單")
+                    fail += 1
+                    continue
+                js_lines.append(
+                    f"document.querySelector(\"select[name='{out_pid}']\").value = 'BN';"
+                )
+                print(f"  {slot:<6}  {out_name:<28} → BN{tag}")
+            else:
+                out_name = "(空格)"
+                print(f"  {slot:<6}  (空格){tag}")
+
             js_lines.append(
                 f"document.querySelector(\"select[name='{in_pid}']\").value = '{slot}';"
             )
-            print(f"  {slot:<6}  {out_name:<28} → BN")
             print(f"         {in_name:<28} → {slot}")
             success += 1
 
@@ -177,7 +184,8 @@ def main():
         if no_sub:
             print("\n[auto_swap] 以下空缺無可用 BN 替補：")
             for s in no_sub:
-                print(f"  {s['slot']:<6}  {s['out']['name']} 今日 OUT，無替補")
+                out_name = s["out"]["name"] if s["out"] else "(空格)"
+                print(f"  {s['slot']:<6}  {out_name} 今日 OUT，無替補")
 
         if not actionable:
             print("\n[auto_swap] 今日無需換人，結束。")

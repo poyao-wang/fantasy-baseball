@@ -1,22 +1,26 @@
 """
 swap_logic.py — 打者換人邏輯（batters only）
 
-邏輯：
-1. 讀 DB1：取得每位打者的 Default_Slot（預設先發位置）與 Current_Slot
-2. 讀 DB2：取得今日 Lineup_Status（OUT 代表今日有賽但不在打線）
-3. 找出 Default_Slot 在先發格（C/1B/2B/3B/SS/OF/Util）且今日 OUT 的球員
-   → 這些位子需要替補
-4. 找出 Current_Slot = BN 且今日 IN/TBD 的球員（可用替補）
-5. 依 DB3 7d 評分排名，逐一分配最佳替補
-6. 回傳 swap 清單供 auto_swap.py 執行
+兩階段邏輯：
+
+Phase 1 — Restore（換回）
+  條件：Default_Slot 在先發格，且目前在 BN，且今日 IN/TBD
+  行動：找出「佔著該格但 Default_Slot 不是該格」的球員（intruder），
+        把 intruder 換下 BN，把原主人換回預設位。
+
+Phase 2 — Replace（替補）
+  條件：Default_Slot 在先發格，且今日 OUT 或 OFF
+  行動：從 BN（含 Phase 1 換下的 intruder）找今日 IN/TBD 的最佳候補補上。
 
 Swap dict 結構：
 {
     "slot": "1B",
-    "out": {"player_id": int, "name": str, "current_slot": str},
+    "out": {"player_id": int, "name": str, "current_slot": str} | None,
     "in":  {"player_id": int, "name": str, "current_slot": "BN"} | None,
+    "restore": bool,   # True = Phase 1 換回，False = Phase 2 替補
 }
 in = None 代表找不到可用替補（不執行換人，僅回報）
+out = None 代表格子是空的（理論上不會發生，防禦性處理）
 """
 import sys
 import re
@@ -163,95 +167,142 @@ def compute_swap_plan(
     scores: dict[int, float],
 ) -> list[dict]:
     """
-    產生 swap 清單。
-
-    Rules:
-    - 「需要替補」：Default_Slot 在先發格 且 今日 Lineup_Status = OUT
-    - 「可用替補」：Current_Slot = BN 且 今日 IN 或 TBD 且 Status ≠ IL
-    - 非 Util 位子：替補需 Eligible_Positions 含該位置
-    - Util 位子：任何打者均可
-    - 有多個相同位子空缺（例如 3 OF）→ 依分數排名逐一分配
-    - 已分配的替補不重複使用
+    產生 swap 清單（Phase 1 換回 + Phase 2 替補）。
     """
     # 加上今日狀態
     for pid, info in batters.items():
         info["today_status"] = today_statuses.get(info["name"], "TBD")
 
-    # 找出空缺（Default_Slot 在先發格且今日 OUT）
+    # 建立 slot → 目前佔用者清單（先發格才追蹤）
+    slot_occupants: dict[str, list[dict]] = {}
+    for pid, info in batters.items():
+        cs = info["current_slot"]
+        if cs not in STARTING_SLOTS:
+            continue
+        slot_occupants.setdefault(cs, []).append({
+            "player_id": pid,
+            "name": info["name"],
+            "default_slot": info["default_slot"],
+            "current_slot": cs,
+            "score": scores.get(pid, 0.0),
+        })
+
+    swaps: list[dict] = []
+    displaced_ids: set[int] = set()   # Phase 1 換下到 BN 的球員
+    restored_ids: set[int] = set()    # Phase 1 換回先發的球員
+
+    # ── Phase 1: Restore（換回）─────────────────────────────
+    # 條件：Default_Slot 在先發格 且 Current_Slot = BN 且 今日 IN/TBD 且 非 IL
+    restore_candidates = sorted(
+        [
+            {
+                "player_id": pid,
+                "name": info["name"],
+                "default_slot": info["default_slot"],
+                "eligible_positions": info["eligible_positions"],
+                "score": scores.get(pid, 0.0),
+            }
+            for pid, info in batters.items()
+            if info["default_slot"] in STARTING_SLOTS
+            and info["current_slot"] == "BN"
+            and info["status"] != "IL"
+            and info["today_status"] in ("IN", "TBD")
+        ],
+        key=lambda x: x["score"],
+        reverse=True,
+    )
+
+    for cand in restore_candidates:
+        target = cand["default_slot"]
+        # 找出佔著該格但 Default_Slot ≠ 該格的球員（intruder）
+        intruders = [
+            o for o in slot_occupants.get(target, [])
+            if o["default_slot"] != target and o["player_id"] not in displaced_ids
+        ]
+        if not intruders:
+            continue  # 格子裡都是應該在的人，不需換回
+        # 踢分數最低的 intruder
+        intruder = min(intruders, key=lambda x: x["score"])
+        swaps.append({
+            "slot": target,
+            "out": {"player_id": intruder["player_id"], "name": intruder["name"], "current_slot": target},
+            "in":  {"player_id": cand["player_id"], "name": cand["name"], "current_slot": "BN"},
+            "restore": True,
+        })
+        displaced_ids.add(intruder["player_id"])
+        restored_ids.add(cand["player_id"])
+
+    # ── Phase 2: Replace（替補）──────────────────────────────
+    # 條件：Default_Slot 在先發格 且 今日 OUT 或 OFF
     empty_slots: list[dict] = []
     for pid, info in batters.items():
         if info["default_slot"] not in STARTING_SLOTS:
             continue
-        if info["today_status"] in ("OUT", "OFF"):
-            empty_slots.append({
-                "slot": info["default_slot"],
-                "out": {
-                    "player_id": pid,
-                    "name": info["name"],
-                    "current_slot": info["current_slot"],
-                },
-            })
-
-    if not empty_slots:
-        return []
-
-    # 找可用替補（BN、今日 IN 或 TBD、非 IL）
-    available_bench: list[dict] = []
-    for pid, info in batters.items():
-        if info["current_slot"] != "BN":
+        if info["today_status"] not in ("OUT", "OFF"):
             continue
-        if info["status"] == "IL":
-            continue
-        if info["today_status"] not in ("IN", "TBD"):
-            continue
-        available_bench.append({
-            "player_id": pid,
-            "name": info["name"],
-            "current_slot": "BN",
-            "eligible_positions": info["eligible_positions"],
-            "score": scores.get(pid, 0.0),
+        empty_slots.append({
+            "slot": info["default_slot"],
+            "out": {
+                "player_id": pid,
+                "name": info["name"],
+                "current_slot": info["current_slot"],
+            },
         })
 
-    # 依評分高到低排序
-    available_bench.sort(key=lambda x: x["score"], reverse=True)
-
-    assigned_ids: set[int] = set()
-    swaps: list[dict] = []
-
-    # 先處理位置固定的格子（非 Util），再處理 Util
-    ordered = (
-        [s for s in empty_slots if s["slot"] != "Util"]
-        + [s for s in empty_slots if s["slot"] == "Util"]
-    )
-
-    for empty in ordered:
-        slot = empty["slot"]
-        candidate = None
-        for bench in available_bench:
-            if bench["player_id"] in assigned_ids:
+    if empty_slots:
+        # 可用替補：原本在 BN（非換回者）+ Phase 1 換下的 intruder，今日 IN/TBD 且非 IL
+        available_bench: list[dict] = []
+        for pid, info in batters.items():
+            if info["status"] == "IL":
                 continue
-            # Util 接受任何打者；其他位子需確認 Eligible_Positions
-            if slot == "Util" or slot in bench["eligible_positions"]:
-                candidate = bench
-                break
-
-        if candidate:
-            assigned_ids.add(candidate["player_id"])
-            swaps.append({
-                "slot": slot,
-                "out": empty["out"],
-                "in": {
-                    "player_id": candidate["player_id"],
-                    "name": candidate["name"],
+            if info["today_status"] not in ("IN", "TBD"):
+                continue
+            if pid in restored_ids:
+                continue  # 已被 Phase 1 換上先發
+            is_original_bn = (info["current_slot"] == "BN" and pid not in restored_ids)
+            is_displaced   = (pid in displaced_ids)
+            if is_original_bn or is_displaced:
+                available_bench.append({
+                    "player_id": pid,
+                    "name": info["name"],
                     "current_slot": "BN",
-                },
-            })
-        else:
-            swaps.append({
-                "slot": slot,
-                "out": empty["out"],
-                "in": None,  # 無可用替補
-            })
+                    "eligible_positions": info["eligible_positions"],
+                    "score": scores.get(pid, 0.0),
+                })
+        available_bench.sort(key=lambda x: x["score"], reverse=True)
+
+        assigned_ids: set[int] = set(restored_ids)
+
+        # 先處理位置固定的格子（非 Util），再處理 Util
+        ordered = (
+            [s for s in empty_slots if s["slot"] != "Util"]
+            + [s for s in empty_slots if s["slot"] == "Util"]
+        )
+
+        for empty in ordered:
+            slot = empty["slot"]
+            candidate = None
+            for bench in available_bench:
+                if bench["player_id"] in assigned_ids:
+                    continue
+                if slot == "Util" or slot in bench["eligible_positions"]:
+                    candidate = bench
+                    break
+            if candidate:
+                assigned_ids.add(candidate["player_id"])
+                swaps.append({
+                    "slot": slot,
+                    "out": empty["out"],
+                    "in": {"player_id": candidate["player_id"], "name": candidate["name"], "current_slot": "BN"},
+                    "restore": False,
+                })
+            else:
+                swaps.append({
+                    "slot": slot,
+                    "out": empty["out"],
+                    "in": None,
+                    "restore": False,
+                })
 
     return swaps
 
@@ -301,11 +352,12 @@ def get_swap_plan(
         if swaps:
             print(f"[swap_logic] 需換人 {len(swaps)} 個位子：")
             for s in swaps:
-                out_name = s["out"]["name"]
+                out_name = s["out"]["name"] if s["out"] else "(空格)"
+                tag = " [換回]" if s.get("restore") else ""
                 in_info = s["in"]
                 if in_info:
                     score = scores.get(in_info["player_id"], 0)
-                    print(f"  {s['slot']:<6}  OUT {out_name:<28} → IN {in_info['name']:<28} (7d score={score:.1f})")
+                    print(f"  {s['slot']:<6}  OUT {out_name:<28} → IN {in_info['name']:<28} (7d score={score:.1f}){tag}")
                 else:
                     print(f"  {s['slot']:<6}  OUT {out_name:<28} → （無可用替補）")
         else:
