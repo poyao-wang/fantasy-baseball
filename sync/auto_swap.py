@@ -145,7 +145,7 @@ async def execute_swaps_async(swaps: list[dict]) -> tuple[int, int, set[int]]:
 
         if not js_lines:
             print("\n[auto_swap] 無有效換人指令，略過 submit")
-            return 0, fail
+            return 0, fail, locked_pids
 
         print()
 
