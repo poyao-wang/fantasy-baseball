@@ -154,12 +154,13 @@ def patch_current_slot(key: str, page_id: str, slot: str) -> None:
 
 # ── MLB Stats API ─────────────────────────────────────────────
 
-def get_today_game_data(today_str: str) -> tuple[set[str], set[str], bool]:
+def get_today_game_data(today_str: str) -> tuple[set[str], set[str], set[str]]:
     """
     查今日所有 MLB 比賽，回傳：
-    - in_batting_lineup: set[str]  — 在今日打線的球員姓名
-    - probable_starters: set[str]  — 今日先發投手姓名
-    - any_lineup_published: bool   — 是否有任何隊已公布打線
+    - in_batting_lineup: set[str]       — 在今日打線的球員姓名
+    - probable_starters: set[str]       — 今日先發投手姓名
+    - in_published_game_players: set[str] — 已公布打線球隊的全體 roster 球員姓名
+      （用於區分 OUT vs TBD：只有自己球隊打線公布了才能判斷 OUT）
     """
     url = (
         f"https://statsapi.mlb.com/api/v1/schedule"
@@ -170,7 +171,7 @@ def get_today_game_data(today_str: str) -> tuple[set[str], set[str], bool]:
 
     in_batting_lineup: set[str] = set()
     probable_starters: set[str] = set()
-    any_lineup_published = False
+    published_team_ids: set[int] = set()
 
     for d in r.json().get("dates", []):
         for game in d.get("games", []):
@@ -184,12 +185,30 @@ def get_today_game_data(today_str: str) -> tuple[set[str], set[str], bool]:
             lineups = game.get("lineups", {})
             home_players = [p.get("fullName", "") for p in lineups.get("homePlayers", [])]
             away_players = [p.get("fullName", "") for p in lineups.get("awayPlayers", [])]
-            if home_players or away_players:
-                any_lineup_published = True
-            in_batting_lineup.update(home_players)
-            in_batting_lineup.update(away_players)
+            if home_players:
+                in_batting_lineup.update(home_players)
+                published_team_ids.add(game["teams"]["home"]["team"]["id"])
+            if away_players:
+                in_batting_lineup.update(away_players)
+                published_team_ids.add(game["teams"]["away"]["team"]["id"])
 
-    return in_batting_lineup, probable_starters, any_lineup_published
+    # 撈已公布打線球隊的完整 roster，才能正確判斷未在打線的球員是 OUT（非 TBD）
+    in_published_game_players: set[str] = set(in_batting_lineup)
+    for team_id in published_team_ids:
+        try:
+            tr = requests.get(
+                f"https://statsapi.mlb.com/api/v1/teams/{team_id}/roster?rosterType=active",
+                timeout=10,
+            )
+            tr.raise_for_status()
+            for p in tr.json().get("roster", []):
+                name = p.get("person", {}).get("fullName", "")
+                if name:
+                    in_published_game_players.add(name)
+        except Exception:
+            pass  # 單隊 roster 失敗不影響整體
+
+    return in_batting_lineup, probable_starters, in_published_game_players
 
 
 # ── 主程式 ────────────────────────────────────────────────────
@@ -259,8 +278,8 @@ def main():
 
         # MLB 今日打線 + 先發
         print("[MLB] 拉取今日打線與先發投手...")
-        in_batting_lineup, probable_starters, any_lineup_published = get_today_game_data(today_str)
-        print(f"  → 先發投手：{len(probable_starters)} 人  |  打線已公布：{'是' if any_lineup_published else '否'}  |  打線人數：{len(in_batting_lineup)}\n")
+        in_batting_lineup, probable_starters, in_published_game_players = get_today_game_data(today_str)
+        print(f"  → 先發投手：{len(probable_starters)} 人  |  已公布打線球隊 roster：{len(in_published_game_players)} 人  |  打線人數：{len(in_batting_lineup)}\n")
 
         # 更新
         ok, skip, fail = 0, 0, 0
@@ -274,12 +293,12 @@ def main():
                 else:
                     new_status = "TBD"
             else:
-                if not any_lineup_published:
-                    new_status = "TBD"
-                elif name in in_batting_lineup:
+                if name in in_batting_lineup:
                     new_status = "IN"
+                elif name in in_published_game_players:
+                    new_status = "OUT"   # 自己球隊打線已公布但不在其中
                 else:
-                    new_status = "OUT"
+                    new_status = "TBD"  # 自己球隊打線尚未公布
 
             old_status = row["current_status"]
             if new_status == old_status:

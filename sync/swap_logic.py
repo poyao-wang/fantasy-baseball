@@ -288,15 +288,15 @@ def compute_swap_plan(
         restored_ids.add(cand["player_id"])
 
     # ── Phase 2: Replace（替補）──────────────────────────────
-    # 條件：Default_Slot 在先發格 且 今日 OUT 或 OFF
+    # 條件：Current_Slot 在先發格（球員實際佔著位子）且 今日 OUT 或 OFF
     empty_slots: list[dict] = []
     for pid, info in batters.items():
-        if info["default_slot"] not in STARTING_SLOTS:
-            continue
+        if info["current_slot"] not in STARTING_SLOTS:
+            continue  # 已在 BN/IL，不需處理（Yahoo 或上一次換人已處理）
         if info["today_status"] not in ("OUT", "OFF"):
             continue
         empty_slots.append({
-            "slot": info["default_slot"],
+            "slot": info["current_slot"],   # 用實際佔用的格子，不是 default
             "out": {
                 "player_id": pid,
                 "name": info["name"],
