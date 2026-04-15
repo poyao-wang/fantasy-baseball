@@ -122,6 +122,11 @@ async def execute_swaps_async(swaps: list[dict]) -> tuple[int, int]:
                     print(f"  [跳過] {out_name} (pid={out_pid}) 不在 SELECT 清單")
                     fail += 1
                     continue
+                out_options = available_map[out_pid]["options"]
+                if out_slot not in out_options:
+                    print(f"  [跳過] {out_name} 無法移到 {out_slot}（已鎖定或選項不存在）")
+                    fail += 1
+                    continue
                 js_lines.append(
                     f"document.querySelector(\"select[name='{out_pid}']\").value = '{out_slot}';"
                 )

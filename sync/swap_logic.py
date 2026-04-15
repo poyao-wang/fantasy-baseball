@@ -361,6 +361,73 @@ def compute_swap_plan(
                     "restore":  False,
                 })
 
+        # ── Phase 2.5: Chain Swap（先發格互補）──────────────────
+        # BN 找不到直接替補時，嘗試「先發格 → 空缺，BN → 先發格」的連鎖換人
+        for i, swap in enumerate(swaps):
+            if swap.get("restore") or swap["in"] is not None:
+                continue
+            slot = swap["slot"]
+
+            # 找先發格中有資格守 slot、今日可上場、尚未被分配的球員
+            chain_movers = []
+            for pid, info in batters.items():
+                if pid in assigned_ids:
+                    continue
+                if info["current_slot"] not in STARTING_SLOTS:
+                    continue
+                if info["today_status"] not in ("IN", "TBD"):
+                    continue
+                if info["status"] == "IL":
+                    continue
+                if slot != "Util" and slot not in info["eligible_positions"]:
+                    continue
+                # 確認他空出的格子有 BN 球員可補
+                vacated = info["current_slot"]
+                filler = next(
+                    (
+                        b for b in available_bench
+                        if b["player_id"] not in assigned_ids
+                        and b["player_id"] != pid
+                        and (vacated == "Util" or vacated in b["eligible_positions"])
+                    ),
+                    None,
+                )
+                if filler:
+                    chain_movers.append({
+                        "player_id": pid,
+                        "name": info["name"],
+                        "current_slot": vacated,
+                        "score": scores.get(pid, 0.0),
+                        "filler": filler,
+                    })
+
+            if not chain_movers:
+                continue
+
+            mover = max(chain_movers, key=lambda x: x["score"])
+            filler = mover["filler"]
+            vacated = mover["current_slot"]
+
+            # 更新原本 in=None 的 swap
+            swaps[i] = {
+                "slot":     slot,
+                "out":      swap["out"],
+                "out_slot": "BN",
+                "in":       {"player_id": mover["player_id"], "name": mover["name"], "current_slot": vacated},
+                "restore":  False,
+            }
+            assigned_ids.add(mover["player_id"])
+            assigned_ids.add(filler["player_id"])
+
+            # 新增：把 mover 空出的先發格由 BN 填上
+            swaps.append({
+                "slot":     vacated,
+                "out":      {"player_id": mover["player_id"], "name": mover["name"], "current_slot": vacated},
+                "out_slot": slot,   # mover 移到 slot，不是去 BN
+                "in":       {"player_id": filler["player_id"], "name": filler["name"], "current_slot": "BN"},
+                "restore":  False,
+            })
+
     return swaps
 
 
