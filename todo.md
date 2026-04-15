@@ -51,11 +51,25 @@
   - [x] 更新 RPi cron：`update_lineup.py && auto_swap.py`
   - [x] cron 自動觸發確認（22:00 JST，sync.log 有 [auto_swap] 紀錄）
   - [ ] 說明 session 過期處理流程（Mac 重新登入 → scp → RPi 自動恢復）
+- [x] **Fix** update_roster.py 離隊清除：upsert 後自動 archive Notion My Roster 中不在 Yahoo 陣容的 pages（修正 Abner Uribe 殘留問題）
 - [x] Step 4.5：swap_logic 換回邏輯修正
   - [x] Phase 0 Rebalance：先發格互換錯位（Riley↔Muncy）直接對調
   - [x] Phase 1 Restore：Default_Slot 在先發格但滯留 BN 者換回（Vlad Jr.→1B）
   - [x] auto_swap.py 支援 out_slot 非 BN
   - [x] RPi 實測三個換人全部成功
+- [x] Step 4.6：swap_logic / update_lineup bug fix + Chain Swap
+  - [x] Phase 2 改用 current_slot 判斷空格（修正已在 BN 球員重複觸發換人）
+  - [x] Phase 2.5 Chain Swap：BN 無替補時從先發格連鎖換人（如 Jackson→2B + PCA→OF）
+  - [x] auto_swap.py out_slot 合法性檢查（防止鎖定球員 chain swap 孤立執行）
+  - [x] update_lineup 改為 per-team roster 判斷 OUT vs TBD（修正西岸球隊誤標 OUT）
+  - [x] cron sync_log 改用 ; 確保無論錯誤都推送 Notion
+- [x] Step 4.7：auto_swap 穩定性修正 + fallback 機制
+  - [x] Playwright timeout 20s → 60s（根因：wait_for_load_state 太短）
+  - [x] Playwright retry 3 次（間隔 30 秒）
+  - [x] Yahoo OAuth 403 自動 retry + force refresh_access_token
+  - [x] locked_pids fallback：被鎖球員排除後重算次優計畫（如 Donovan→2B + PCA→OF）
+  - [x] swap_logic Phase 2.5 改用 effective slot（Phase 1 restore 球員可參與 chain swap）
+  - [x] swap_logic 新增 excluded_pids 參數供 fallback 使用
 - [ ] Step 5：投手策略（依本週 H2H 領先程度決定是否保護 ERA/WHIP）
 
 ### 其他功能

@@ -137,7 +137,7 @@ flowchart TD
 
 | 腳本 | 觸發 | 說明 |
 |------|------|------|
-| `update_roster.py` | 每週一 / 手動 | 從 Yahoo API 拉自己陣容，upsert DB1 |
+| `update_roster.py` | 每週一 / 手動 | 從 Yahoo API 拉自己陣容，upsert DB1；upsert 後自動比對 Notion My Roster，archive 已離隊球員 |
 | `update_schedule.py` | 每週一 | 建立 DB1 所有球員的當週 DB2 rows |
 | `update_stats.py` | 每週一 | 從 Yahoo API 拉數據，upsert DB3 |
 | `update_lineup.py` | 每小時 22–08 JST | Yahoo API 同步 DB1 Current_Slot + MLB API 更新 DB2 今日 Lineup_Status |
@@ -209,10 +209,14 @@ auto_swap.py（update_lineup 之後手動或 cron）
   │       - 找出 Default_Slot 在先發格但目前在 BN 且今日 IN/TBD 的球員
   │       - 找佔著該格的 intruder（Default_Slot ≠ 該格），踢去 BN，原主人換回
   │     Phase 2 — Replace（替補）
-  │       - 找出 Default_Slot 在先發格且今日 OFF/OUT 的球員
+  │       - 找出 Current_Slot 在先發格且今日 OFF/OUT 的球員
   │       - 從 BN（含 Phase 1 換下的 intruder）找最佳候補補上
   │       - 依 DB3 7d 評分排名，Util 格接受任意打者
   │       - in=None 代表無可用替補
+  │     Phase 2.5 — Chain Swap（連鎖換人）
+  │       - BN 找不到直接替補時，從其他先發格找有資格球員移過去
+  │       - 空出的先發格再由 BN 補（如 Jackson→2B + PCA→OF 連鎖）
+  │       - out_slot 合法性檢查：若移出球員已鎖定（已打完），chain swap 整組跳過
   └── Playwright：執行換人
         - 載入 yahoo_session.json（session cookie）
         - 陣容頁讀取隱藏 SELECT

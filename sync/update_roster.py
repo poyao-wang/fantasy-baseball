@@ -52,6 +52,36 @@ def find_page_by_player_id(key: str, player_id: int) -> str | None:
     return results[0]["id"] if results else None
 
 
+def fetch_all_my_roster_pages(key: str) -> dict[int, str]:
+    """DB1 裡所有 Player_Type == My Roster 的 pages，回傳 {player_id: page_id}"""
+    url = f"https://api.notion.com/v1/databases/{DB_PLAYERS}/query"
+    body: dict = {
+        "page_size": 100,
+        "filter": {"property": "Player_Type", "select": {"equals": "My Roster"}},
+    }
+    result: dict[int, str] = {}
+    while True:
+        r = requests.post(url, headers=notion_headers(key), json=body)
+        r.raise_for_status()
+        data = r.json()
+        for page in data["results"]:
+            pid_prop = page["properties"].get("Player_ID", {}).get("number")
+            if pid_prop is not None:
+                result[int(pid_prop)] = page["id"]
+        if data.get("has_more"):
+            body["start_cursor"] = data["next_cursor"]
+        else:
+            break
+    return result
+
+
+def archive_page(key: str, page_id: str) -> None:
+    """把 Notion page archive（等同刪除）"""
+    url = f"https://api.notion.com/v1/pages/{page_id}"
+    r = requests.patch(url, headers=notion_headers(key), json={"archived": True})
+    r.raise_for_status()
+
+
 # ── 資料轉換 ──────────────────────────────────────────────────
 
 def extract_player_id(p: dict) -> int:
@@ -155,8 +185,25 @@ def main():
                 print(f"  [錯誤] {p.get('name', '?')}: {e}")
                 fail += 1
 
-        print(f"\n完成：{ok} 成功 / {fail} 失敗  →  Notion DB1 Players")
-        _append_sync_log(f"[update_roster] {ok} 成功 / {fail} 失敗")
+        # ── 清除已離隊球員 ────────────────────────────────────────
+        current_ids = {extract_player_id(p) for p in roster}
+        notion_roster = fetch_all_my_roster_pages(notion_key)
+        stale = {pid: pid_page for pid, pid_page in notion_roster.items() if pid not in current_ids}
+
+        removed = 0
+        for pid, pid_page in stale.items():
+            try:
+                archive_page(notion_key, pid_page)
+                print(f"  [移除] player_id={pid}（已不在陣容）")
+                removed += 1
+            except Exception as e:
+                print(f"  [錯誤] archive player_id={pid}: {e}")
+
+        if removed:
+            print(f"\n  共移除 {removed} 位已離隊球員")
+
+        print(f"\n完成：{ok} 成功 / {fail} 失敗 / {removed} 移除  →  Notion DB1 Players")
+        _append_sync_log(f"[update_roster] {ok} 成功 / {fail} 失敗 / {removed} 移除")
     except Exception as e:
         _append_sync_log(f"[update_roster] ERROR: {e}")
         raise

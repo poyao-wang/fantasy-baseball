@@ -363,17 +363,28 @@ def compute_swap_plan(
 
         # ── Phase 2.5: Chain Swap（先發格互補）──────────────────
         # BN 找不到直接替補時，嘗試「先發格 → 空缺，BN → 先發格」的連鎖換人
+        # 注意：Phase 0/1 已計畫的 restore 球員（如 Donovan）雖然 DB1 current_slot 仍為 BN，
+        # 但計畫後有效 slot 已是先發格，需用 effective_slot 判斷。
+        effective_slot: dict[int, str] = {pid: info["current_slot"] for pid, info in batters.items()}
+        for s in swaps:
+            if s["in"]:
+                effective_slot[s["in"]["player_id"]] = s["slot"]
+            if s["out"]:
+                effective_slot[s["out"]["player_id"]] = s.get("out_slot", "BN")
+
         for i, swap in enumerate(swaps):
             if swap.get("restore") or swap["in"] is not None:
                 continue
             slot = swap["slot"]
 
-            # 找先發格中有資格守 slot、今日可上場、尚未被分配的球員
+            # 找「計畫後在先發格」且有資格守 slot、今日可上場、尚未被分配的球員
+            # restored_ids 球員也納入（他們將在先發格，可做 chain mover）
             chain_movers = []
             for pid, info in batters.items():
-                if pid in assigned_ids:
+                if pid in assigned_ids and pid not in restored_ids:
                     continue
-                if info["current_slot"] not in STARTING_SLOTS:
+                eff = effective_slot.get(pid, info["current_slot"])
+                if eff not in STARTING_SLOTS:
                     continue
                 if info["today_status"] not in ("IN", "TBD"):
                     continue
@@ -382,7 +393,7 @@ def compute_swap_plan(
                 if slot != "Util" and slot not in info["eligible_positions"]:
                     continue
                 # 確認他空出的格子有 BN 球員可補
-                vacated = info["current_slot"]
+                vacated = eff
                 filler = next(
                     (
                         b for b in available_bench
@@ -437,9 +448,11 @@ def get_swap_plan(
     notion_key: str | None = None,
     today_str: str | None = None,
     verbose: bool = True,
+    excluded_pids: set[int] | None = None,
 ) -> list[dict]:
     """
     拉取 Notion 資料，計算今日換人清單。
+    excluded_pids：排除特定球員（如已確認被鎖的 player_id），用於 fallback retry。
     可直接 import 供 auto_swap.py 呼叫。
     """
     if notion_key is None:
@@ -453,6 +466,8 @@ def get_swap_plan(
     if verbose:
         print("[swap_logic] 讀取 DB1 打者資料...")
     batters = get_all_batters(notion_key)
+    if excluded_pids:
+        batters = {pid: info for pid, info in batters.items() if pid not in excluded_pids}
     if verbose:
         print(f"  → {len(batters)} 位打者")
 

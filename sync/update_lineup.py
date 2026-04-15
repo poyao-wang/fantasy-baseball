@@ -228,8 +228,18 @@ def main():
         sc = OAuth2(None, None, from_file="oauth2.json")
         if not sc.token_is_valid():
             sc.refresh_access_token()
-        league = yfa.Game(sc, "mlb").to_league(LEAGUE_ID)
-        roster = league.to_team(league.team_key()).roster()
+        # Yahoo API 有時在 token 剛 refresh 後仍回 403，retry 一次
+        for _attempt in range(2):
+            try:
+                league = yfa.Game(sc, "mlb").to_league(LEAGUE_ID)
+                roster = league.to_team(league.team_key()).roster()
+                break
+            except Exception as e:
+                if _attempt == 0 and ("Forbidden" in str(e) or "401" in str(e) or "403" in str(e)):
+                    print(f"  [Yahoo] token 疑似過期，強制 refresh 後 retry... ({e})")
+                    sc.refresh_access_token()
+                else:
+                    raise
 
         yahoo_slots: dict[int, tuple[str, str]] = {}  # {player_id: (name, slot)}
         for p in roster:

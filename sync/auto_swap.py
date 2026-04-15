@@ -47,15 +47,15 @@ def _append_sync_log(message: str) -> None:
 
 # ── Playwright 執行 ───────────────────────────────────────────
 
-async def execute_swaps_async(swaps: list[dict]) -> tuple[int, int]:
+async def execute_swaps_async(swaps: list[dict]) -> tuple[int, int, set[int]]:
     """
     用 Playwright 批次執行換人，一次 form submit。
-    回傳 (success_count, fail_count)
-    success_count = 實際送出的換人對數（不含無替補的空缺）
+    回傳 (success_count, fail_count, locked_pids)
+    locked_pids：在 Yahoo SELECT 找不到（被鎖）的 in 球員 player_id 集合
     """
     actionable = [s for s in swaps if s["in"] is not None]
     if not actionable:
-        return 0, 0
+        return 0, 0, set()
 
     pw, browser, ctx = await get_context_async()
     page = await ctx.new_page()
@@ -93,6 +93,7 @@ async def execute_swaps_async(swaps: list[dict]) -> tuple[int, int]:
         js_lines: list[str] = []
         success = 0
         fail = 0
+        locked_pids: set[int] = set()
 
         for swap in actionable:
             out_info = swap["out"]
@@ -103,7 +104,8 @@ async def execute_swaps_async(swaps: list[dict]) -> tuple[int, int]:
 
             # 確認 in_player 在 SELECT 清單裡
             if in_pid not in available_map:
-                print(f"  [跳過] {in_name} (pid={in_pid}) 不在 SELECT 清單")
+                print(f"  [跳過] {in_name} (pid={in_pid}) 不在 SELECT 清單（被鎖）")
+                locked_pids.add(swap["in"]["player_id"])
                 fail += 1
                 continue
 
@@ -156,7 +158,7 @@ async def execute_swaps_async(swaps: list[dict]) -> tuple[int, int]:
         await page.evaluate(
             "() => { document.querySelector(\"form[action*='editroster']\").submit(); }"
         )
-        await page.wait_for_load_state("domcontentloaded", timeout=20_000)
+        await page.wait_for_load_state("domcontentloaded", timeout=60_000)
         await page.wait_for_timeout(2000)
 
         final_url = page.url
@@ -165,7 +167,7 @@ async def execute_swaps_async(swaps: list[dict]) -> tuple[int, int]:
         if "login.yahoo.com" in final_url:
             raise RuntimeError("提交後被導回登入頁，session 可能已失效，請重新執行 yahoo_playwright.py")
 
-        return success, fail
+        return success, fail, locked_pids
 
     finally:
         await page.close()
@@ -203,15 +205,52 @@ def main():
             return
 
         # Step 2：Playwright 執行
-        print(f"\n[auto_swap] 執行 {len(actionable)} 個換人...\n")
-        success, fail = asyncio.run(execute_swaps_async(swaps))
+        # - Playwright 本身失敗：最多 retry 2 次（等 30 秒）
+        # - 有球員被鎖（不在 SELECT）：排除後重新計算換人計畫，最多 fallback 2 輪
+        notion_key = None  # swap_logic 內部會 load
+        excluded_pids: set[int] = set()
+        total_success, total_fail = 0, 0
+        all_actionable = actionable  # 用於最終 summary
 
+        for fallback_round in range(3):  # 最多 2 次 fallback
+            if fallback_round > 0:
+                if not excluded_pids:
+                    break
+                print(f"\n[auto_swap] fallback round {fallback_round}：排除 {excluded_pids}，重新計算計畫...")
+                from swap_logic import get_swap_plan as _gsp
+                swaps = _gsp(notion_key=notion_key, today_str=today_str, excluded_pids=excluded_pids)
+                actionable = [s for s in swaps if s["in"] is not None]
+                if not actionable:
+                    print("[auto_swap] fallback 後無需換人，結束。")
+                    break
+                all_actionable = actionable
+
+            max_attempts = 3
+            locked_this_round: set[int] = set()
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    s_ok, s_fail, locked_this_round = asyncio.run(execute_swaps_async(swaps))
+                    total_success += s_ok
+                    total_fail += s_fail
+                    break
+                except Exception as e:
+                    if attempt < max_attempts:
+                        print(f"\n[auto_swap] 第 {attempt} 次失敗：{e}，30 秒後 retry...")
+                        import time; time.sleep(30)
+                    else:
+                        raise
+
+            if not locked_this_round:
+                break  # 沒有被鎖的球員，不需要 fallback
+            excluded_pids.update(locked_this_round)
+
+        success, fail = total_success, total_fail
         print(f"\n[auto_swap] 完成：{success} 換人成功 / {fail} 失敗")
 
         # sync.log 摘要
         summary = " | ".join(
             f"{s['slot']}:{s['out']['name']}→{s['in']['name']}"
-            for s in actionable
+            for s in all_actionable
             if s["in"]
         )
         _append_sync_log(f"[auto_swap] {success} 換人成功 / {fail} 失敗  ({summary})")

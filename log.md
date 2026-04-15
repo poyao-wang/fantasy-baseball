@@ -50,6 +50,8 @@
 2026-04-14 [Notion] 四個 DB 統一改名加 Fantasy 前綴：Fantasy Roster / Fantasy Schedule / Fantasy Stats / Fantasy Sync Log（📋）。notion_config.py 加入 DB_LOGS。
 2026-04-14 [Fix] swap_logic.py 新增換回邏輯：Phase 0 Rebalance（先發格互換錯位，如 Riley↔Muncy 直接對調，不經 BN）+ Phase 1 Restore（Default_Slot 在先發格但目前在 BN 者換回，如 Vlad Jr.→1B 踢走 Caratini）。auto_swap.py 新增 out_slot 欄位支援非 BN 目標格。
 2026-04-14 [Test] 三個換人問題全部修正並在 RPi 實測：Vlad Jr.→1B、Muncy→3B、Riley→Util，Notion DB1 Current_Slot 同步更新，Fantasy Sync Log 紀錄正常。
+2026-04-15 [Fix] update_roster.py 新增離隊清除邏輯：upsert 完成後，比對 Notion My Roster 與 Yahoo 現有陣容，不在陣容的 pages 自動 archive，防止換人/交易後舊球員殘留。
+2026-04-15 [Manual] add_trade_target.py：新增交易目標 José Caballero（NYY，2B/3B/SS/OF，ID=60776）到 Notion（DB1×1 + DB2×7 + DB3×3，共 11 筆）。
 
 ---
 
@@ -96,3 +98,18 @@
 2026-04-14  Step 4 完成。RPi 安裝 Playwright + Chromium ARM64，scp session，git pull，RPi dry-run 正常（Vlad Jr OFF→無替補，邏輯正確）。cron 更新：update_lineup → auto_swap → sync_log（每小時），週一全量末尾加 sync_log。新增 sync_log.py，把 sync.log 同步到 Notion Fantasy Sync Log（DB4）。Notion 四個 DB 統一改名加 Fantasy 前綴。今晚 22:00 JST 等候第一次 cron 自動觸發確認。
 
 2026-04-14  swap_logic 換回邏輯修正。原本只有「替補（Replace）」邏輯，缺少換回機制，導致 Vlad Jr. 滯留 BN、Caratini 佔著 1B，以及 Riley↔Muncy 互換錯位問題。新增三階段邏輯：Phase 0 Rebalance（先發格互換對調）、Phase 1 Restore（從 BN 換回預設位）、Phase 2 Replace（原有替補）。auto_swap.py 支援 out_slot 非 BN 情況。RPi 實測三個換人全部成功，Notion 同步正常。
+
+2026-04-15  update_roster.py 除錯：換掉 Abner Uribe 後 Notion 名單仍殘留舊資料，原因是 update_roster.py 只做 upsert 從不清除離隊球員。修正：新增 `fetch_all_my_roster_pages()` 抓取 Notion 所有 My Roster pages，與 Yahoo 現有陣容比對，不在陣容的 pages 呼叫 `archive_page()` 自動移除。執行後 Abner Uribe（player_id=12746）成功 archive，新人 Jeremiah Jackson 自動新增，26/26 全數正確。另新增交易目標 José Caballero（NYY，2B/3B/SS/OF）。
+2026-04-16  auto_swap 連環 bug 除錯修正。4/15 Altuve（OUT）未被自動換人，查 RPi journalctl 確認根因：22:00 JST Playwright timeout、23:00 JST Yahoo OAuth expired 兩個問題連發，整個換人窗口被封。修正三處：① Playwright timeout 20s→60s + retry 3 次；② Yahoo API 403 retry + force refresh；③ auto_swap fallback 機制（Jackson 被鎖 → 自動排除重算 → Donovan→2B + PCA→OF）。swap_logic Phase 2.5 同步修正，改用 effective slot 讓 Phase 1 restore 球員也能參與 chain swap。
+2026-04-16  swap_logic / update_lineup 重大修正與功能擴充。發現兩個 bug：①Phase 2 用 default_slot 判斷空格，導致已在 BN 的 Muncy 仍觸發 3B 換人，Riley 被多餘移動；②update_lineup 的 any_lineup_published 全域旗標，導致東岸球隊打線先公布後，西岸球隊 Will Smith / Donovan 等全被誤標 OUT。修正：Phase 2 改用 current_slot 判斷；update_lineup 改為撈已公布打線球隊的完整 roster 做 per-team 判斷。新功能：Phase 2.5 Chain Swap（連鎖換人），BN 無替補時從先發格拉人（如 Jackson→2B、PCA→OF）。auto_swap 新增 out_slot 合法性檢查防止鎖定球員造成 chain swap 孤立。cron 修正：sync_log 改用 ; 確保每次都推送 Notion。
+2026-04-16 [Fix] swap_logic.py Phase 2 改用 current_slot（非 default_slot）判斷需換人的空格，防止已在 BN 的球員重複觸發空格換人（如 Muncy 已被 Yahoo 移至 BN 仍誤觸發 3B 換人）
+2026-04-16 [Feature] swap_logic.py 新增 Phase 2.5 Chain Swap：BN 無替補時，從其他先發格找有資格的球員移過去，空出的格再由 BN 補（如 Jackson→2B + PCA→OF 連鎖）
+2026-04-16 [Fix] auto_swap.py 新增 out_slot 合法性檢查：out 球員的目標格也需確認在 SELECT 選項內，防止鎖定球員的 chain swap 孤立執行（如 Jackson 已打完被鎖，secondary swap 也自動跳過）
+2026-04-16 [Fix] update_lineup.py 打線狀態判斷改為 per-team roster：撈已公布打線球隊的完整 roster，只有自己球隊打線公布了才判斷 OUT（修正西岸球隊 Will Smith / Donovan 等被誤標 OUT 的問題）
+2026-04-16 [Cron] RPi cron 修正：每小時排程 auto_swap 後的 && 改成 ;，確保 sync_log.py 無論腳本成敗都執行，Notion Fantasy Sync Log 不漏記錄
+2026-04-16 [Debug] Altuve 未自動換人除錯：查 RPi journalctl 確認 22:00 JST 有兩個連環問題：① auto_swap Playwright timeout（wait_for_load_state 20s 太短）② update_lineup Yahoo API "Forbidden access"（OAuth token 過期且 refresh 失敗）
+2026-04-16 [Fix] auto_swap.py Playwright timeout 修正：wait_for_load_state 20s → 60s；主程式加入 retry 機制（最多 3 次，間隔 30 秒）
+2026-04-16 [Fix] update_lineup.py Yahoo OAuth 錯誤修正：Yahoo API 呼叫加 retry，回 403/Forbidden 時強制 refresh_access_token() 再重試一次
+2026-04-16 [Fix] auto_swap.py 新增 locked_pids fallback：偵測到 in 球員不在 Yahoo SELECT（比賽已開始被鎖）時，將該球員加入 excluded_pids，重新呼叫 get_swap_plan() 計算次優方案（如 Jackson 被鎖 → fallback Donovan→2B + PCA→OF）
+2026-04-16 [Fix] swap_logic.py Phase 2.5 改用 effective slot：Phase 0/1 計畫後的球員位置（如 Donovan 被 Phase 1 計畫移到 OF）在 Phase 2.5 chain swap 中正確被考慮為可用 mover，而非沿用 DB1 的原始 current_slot（BN）
+2026-04-16 [Feature] swap_logic.py 新增 excluded_pids 參數：支援排除指定球員重新計算換人計畫，供 auto_swap fallback 使用
