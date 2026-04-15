@@ -102,6 +102,8 @@
 2026-04-15  update_roster.py 除錯：換掉 Abner Uribe 後 Notion 名單仍殘留舊資料，原因是 update_roster.py 只做 upsert 從不清除離隊球員。修正：新增 `fetch_all_my_roster_pages()` 抓取 Notion 所有 My Roster pages，與 Yahoo 現有陣容比對，不在陣容的 pages 呼叫 `archive_page()` 自動移除。執行後 Abner Uribe（player_id=12746）成功 archive，新人 Jeremiah Jackson 自動新增，26/26 全數正確。另新增交易目標 José Caballero（NYY，2B/3B/SS/OF）。
 2026-04-16  auto_swap 連環 bug 除錯修正。4/15 Altuve（OUT）未被自動換人，查 RPi journalctl 確認根因：22:00 JST Playwright timeout、23:00 JST Yahoo OAuth expired 兩個問題連發，整個換人窗口被封。修正三處：① Playwright timeout 20s→60s + retry 3 次；② Yahoo API 403 retry + force refresh；③ auto_swap fallback 機制（Jackson 被鎖 → 自動排除重算 → Donovan→2B + PCA→OF）。swap_logic Phase 2.5 同步修正，改用 effective slot 讓 Phase 1 restore 球員也能參與 chain swap。
 2026-04-16  swap_logic / update_lineup 重大修正與功能擴充。發現兩個 bug：①Phase 2 用 default_slot 判斷空格，導致已在 BN 的 Muncy 仍觸發 3B 換人，Riley 被多餘移動；②update_lineup 的 any_lineup_published 全域旗標，導致東岸球隊打線先公布後，西岸球隊 Will Smith / Donovan 等全被誤標 OUT。修正：Phase 2 改用 current_slot 判斷；update_lineup 改為撈已公布打線球隊的完整 roster 做 per-team 判斷。新功能：Phase 2.5 Chain Swap（連鎖換人），BN 無替補時從先發格拉人（如 Jackson→2B、PCA→OF）。auto_swap 新增 out_slot 合法性檢查防止鎖定球員造成 chain swap 孤立。cron 修正：sync_log 改用 ; 確保每次都推送 Notion。
+
+2026-04-16  Pi 測試 + 兩個 bug 修正。①auto_swap.py 提早 return 缺少 locked_pids 第三個回傳值，導致 fallback 機制啟動後全部 retry 失敗。②sync_log.py 同分鐘重複 key 時直接略過，不更新 Notion 舊條目，導致最新換人結果無法顯示。兩處均修正並在 Pi 驗證通過。fallback 正常（Jackson 鎖定 → 排除後重算，Donovan→2B + PCA→OF），sync_log 113 筆全數 PATCH 更新 Notion DB4。
 2026-04-16 [Fix] swap_logic.py Phase 2 改用 current_slot（非 default_slot）判斷需換人的空格，防止已在 BN 的球員重複觸發空格換人（如 Muncy 已被 Yahoo 移至 BN 仍誤觸發 3B 換人）
 2026-04-16 [Feature] swap_logic.py 新增 Phase 2.5 Chain Swap：BN 無替補時，從其他先發格找有資格的球員移過去，空出的格再由 BN 補（如 Jackson→2B + PCA→OF 連鎖）
 2026-04-16 [Fix] auto_swap.py 新增 out_slot 合法性檢查：out 球員的目標格也需確認在 SELECT 選項內，防止鎖定球員的 chain swap 孤立執行（如 Jackson 已打完被鎖，secondary swap 也自動跳過）
@@ -113,3 +115,6 @@
 2026-04-16 [Fix] auto_swap.py 新增 locked_pids fallback：偵測到 in 球員不在 Yahoo SELECT（比賽已開始被鎖）時，將該球員加入 excluded_pids，重新呼叫 get_swap_plan() 計算次優方案（如 Jackson 被鎖 → fallback Donovan→2B + PCA→OF）
 2026-04-16 [Fix] swap_logic.py Phase 2.5 改用 effective slot：Phase 0/1 計畫後的球員位置（如 Donovan 被 Phase 1 計畫移到 OF）在 Phase 2.5 chain swap 中正確被考慮為可用 mover，而非沿用 DB1 的原始 current_slot（BN）
 2026-04-16 [Feature] swap_logic.py 新增 excluded_pids 參數：支援排除指定球員重新計算換人計畫，供 auto_swap fallback 使用
+2026-04-16 [Fix] auto_swap.py execute_swaps_async：無有效換人指令的提早 return 路徑只回傳 2 個值（缺少 locked_pids），修正為回傳 (0, fail, locked_pids)
+2026-04-16 [Fix] sync_log.py upsert 邏輯：原本存在就直接「略過」，改為 PATCH 更新 message + status，防止同分鐘重複 key（如手動重跑或 fallback）遮蓋最新結果
+2026-04-16 [Test] Pi 端對端測試通過：auto_swap fallback 正常（Jackson 已鎖 → 排除後重算，Donovan→2B + PCA→OF），sync_log 113 筆全數 PATCH 更新 Notion DB4

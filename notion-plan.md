@@ -142,6 +142,11 @@ flowchart TD
 | `update_stats.py` | 每週一 | 從 Yahoo API 拉數據，upsert DB3 |
 | `update_lineup.py` | 每小時 22–08 JST | Yahoo API 同步 DB1 Current_Slot + MLB API 更新 DB2 今日 Lineup_Status |
 | `add_trade_target.py` | 手動 | 輸入球員姓名 → 查 Yahoo API → upsert DB1 + 建立 DB2 本週賽程 |
+| `yahoo_playwright.py` | 手動（首次 / session 過期） | Yahoo 瀏覽器登入，session 存 yahoo_session.json |
+| `setup_default_slot.py` | 手動（一次性） | DB1 Default_Slot 從 Current_Slot 初始化 |
+| `swap_logic.py` | 被 auto_swap.py import | 四階段換人邏輯（Rebalance / Restore / Replace / Chain Swap） |
+| `auto_swap.py` | 每小時 22–08 JST（update_lineup 之後） | Playwright 執行換人，支援 --dry-run，fallback locked_pids，結果寫 sync.log |
+| `sync_log.py` | 每小時 / 週一全量末尾 | sync.log → DB4 Fantasy Sync Log（upsert：新增 or PATCH 更新） |
 
 ---
 
@@ -162,11 +167,11 @@ flowchart TD
 ## Cron 排程（RPi）
 
 ```
-# 每週一 9:00 JST = 0:00 UTC
-0 0 * * 1  cd ~/fantasy-baseball && python3 sync/update_roster.py && python3 sync/update_schedule.py && python3 sync/update_stats.py
+# 每週一 9:00 JST = 0:00 UTC（全量更新）
+0 0 * * 1  cd ~/fantasy-baseball && source venv/bin/activate && python sync/update_roster.py && python sync/update_schedule.py && python sync/update_stats.py ; python sync/sync_log.py
 
-# 每小時（22:00–08:00 JST = 13:00–23:00 UTC）打線狀態更新
-0 13-23 * * *  cd ~/fantasy-baseball && python3 sync/update_lineup.py
+# 每小時（22:00–08:00 JST = 13:00–23:00 UTC）打線更新 + 自動換人
+0 13-23 * * *  cd ~/fantasy-baseball && source venv/bin/activate && python sync/update_lineup.py ; python sync/auto_swap.py ; python sync/sync_log.py
 ```
 
 ---
