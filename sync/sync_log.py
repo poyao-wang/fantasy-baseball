@@ -113,10 +113,18 @@ def build_properties(entry: dict) -> dict:
 
 
 def upsert_entry(key: str, entry: dict) -> str:
-    """存在則跳過（log 不改），不存在則新增。回傳 '新增' 或 '略過'"""
+    """存在則更新 message/status，不存在則新增。回傳 '新增'、'更新' 或 '略過'"""
     page_id = find_page_by_title(key, entry["title"])
     if page_id:
-        return "略過"
+        # 用 PATCH 更新 message 與 status，確保 Notion 永遠顯示最新內容
+        props = {
+            "Message": {"rich_text": [{"text": {"content": entry["message"][:2000]}}]},
+            "Status":  {"select": {"name": entry["status"]}},
+        }
+        url = f"https://api.notion.com/v1/pages/{page_id}"
+        r = requests.patch(url, headers=notion_headers(key), json={"properties": props})
+        r.raise_for_status()
+        return "更新"
     props = build_properties(entry)
     url = "https://api.notion.com/v1/pages"
     body = {"parent": {"database_id": DB_LOGS}, "properties": props}
@@ -134,21 +142,24 @@ def main():
         return
 
     print(f"[sync_log] 讀到 {len(entries)} 筆 log，開始同步到 Notion DB4...\n")
-    added, skipped, failed = 0, 0, 0
+    added, updated, skipped, failed = 0, 0, 0, 0
 
     for entry in entries:
         try:
             action = upsert_entry(key, entry)
-            print(f"  [{action}] {entry['title']}  {entry['status']}  {entry['message'][:60]}")
+            if action != "略過":
+                print(f"  [{action}] {entry['title']}  {entry['status']}  {entry['message'][:60]}")
             if action == "新增":
                 added += 1
+            elif action == "更新":
+                updated += 1
             else:
                 skipped += 1
         except Exception as e:
             print(f"  [錯誤] {entry['title']}: {e}")
             failed += 1
 
-    print(f"\n完成：{added} 新增 / {skipped} 略過 / {failed} 失敗  →  Notion DB4 Logs")
+    print(f"\n完成：{added} 新增 / {updated} 更新 / {skipped} 略過 / {failed} 失敗  →  Notion DB4 Logs")
 
 
 if __name__ == "__main__":
