@@ -42,15 +42,6 @@ def notion_headers(key: str) -> dict:
     }
 
 
-def find_page_by_player_id(key: str, player_id: int) -> str | None:
-    """DB1 裡找 Player_ID == player_id 的 page，回傳 page_id 或 None"""
-    url = f"https://api.notion.com/v1/databases/{DB_PLAYERS}/query"
-    body = {"filter": {"property": "Player_ID", "number": {"equals": player_id}}}
-    r = requests.post(url, headers=notion_headers(key), json=body)
-    r.raise_for_status()
-    results = r.json().get("results", [])
-    return results[0]["id"] if results else None
-
 
 def fetch_all_my_roster_pages(key: str) -> dict[int, str]:
     """DB1 裡所有 Player_Type == My Roster 的 pages，回傳 {player_id: page_id}"""
@@ -136,11 +127,10 @@ def build_properties(p: dict, player_id: int) -> dict:
 
 # ── upsert ────────────────────────────────────────────────────
 
-def upsert_player(key: str, p: dict) -> str:
+def upsert_player(key: str, p: dict, page_id: str | None) -> str:
     """存在則 PATCH，不存在則 POST。回傳 '更新' 或 '新增'"""
     player_id = extract_player_id(p)
     props = build_properties(p, player_id)
-    page_id = find_page_by_player_id(key, player_id)
 
     if page_id:
         url = f"https://api.notion.com/v1/pages/{page_id}"
@@ -171,10 +161,16 @@ def main():
 
         print(f"陣容共 {len(roster)} 人，開始 upsert 到 Notion DB1...\n")
 
+        # 一次 batch 拉完 Notion 現有陣容，供 upsert 和清除共用
+        print("[Notion] 拉取 DB1 現有陣容（batch）...")
+        notion_roster = fetch_all_my_roster_pages(notion_key)
+        print(f"  → 共 {len(notion_roster)} 筆\n")
+
         ok, fail = 0, 0
         for p in roster:
             try:
-                action = upsert_player(notion_key, p)
+                pid = extract_player_id(p)
+                action = upsert_player(notion_key, p, notion_roster.get(pid))
                 slot = p.get("selected_position", "?")
                 pos_type = p.get("position_type", "?")
                 status = normalize_status(p)
@@ -187,7 +183,6 @@ def main():
 
         # ── 清除已離隊球員 ────────────────────────────────────────
         current_ids = {extract_player_id(p) for p in roster}
-        notion_roster = fetch_all_my_roster_pages(notion_key)
         stale = {pid: pid_page for pid, pid_page in notion_roster.items() if pid not in current_ids}
 
         removed = 0
