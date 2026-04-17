@@ -5,21 +5,21 @@
 ```mermaid
 flowchart TD
     subgraph Sources["資料來源"]
-        Y[Yahoo Fantasy API\n陣容 / 積分 / 球員數據]
-        M[MLB Stats API\n賽程 / 先發投手 / 打線]
+        Y[Yahoo Fantasy API<br/>陣容 / 積分 / 球員數據]
+        M[MLB Stats API<br/>賽程 / 先發投手 / 打線]
     end
 
     subgraph RPi["Raspberry Pi（自動化）"]
-        S1["cron: 每週一 9am JST\nupdate_roster.py\nupdate_schedule.py\nupdate_stats.py\nsync_log.py"]
-        S2["cron: 每小時 22:00–08:00 JST\nupdate_lineup.py → auto_swap.py → sync_log.py"]
-        S3["手動觸發\nadd_trade_target.py\n（加入觀察球員時）"]
+        S1["cron: 每週一 9am JST<br/>update_roster.py<br/>update_schedule.py<br/>update_stats.py<br/>sync_log.py"]
+        S2["cron: 每小時 22:00–08:00 JST<br/>update_lineup.py → auto_swap.py → sync_log.py"]
+        S3["手動觸發<br/>add_trade_target.py<br/>（加入觀察球員時）"]
     end
 
     subgraph Notion["Notion DB"]
-        DB1[("Fantasy Roster\n所有球員\nMy Roster + Trade Target")]
-        DB2[("Fantasy Schedule\n每日賽況")]
-        DB3[("Fantasy Stats\n區間快照 7d/30d/season")]
-        DB4[("Fantasy Sync Log\n腳本執行紀錄")]
+        DB1[("Fantasy Roster<br/>所有球員<br/>My Roster + Trade Target")]
+        DB2[("Fantasy Schedule<br/>每日賽況")]
+        DB3[("Fantasy Stats<br/>區間快照 7d/30d/season")]
+        DB4[("Fantasy Sync Log<br/>腳本執行紀錄")]
     end
 
     subgraph Views["Notion View（查閱用）"]
@@ -89,12 +89,15 @@ flowchart TD
 |----------|------|------|
 | Title | Title | `姓名 YYYY-MM-DD`（upsert key） |
 | Player | Relation → DB1 | 關聯球員 |
-| Player_Type | Formula | 從 DB1 rollup，方便直接 filter |
+| batterOrPitcherRoll | Rollup → DB1 | 從 Player 關聯拉取 Position_Type（B/P），判斷打者或投手用 |
 | Date | Date | 比賽日期（ET 基準） |
 | Opponent | Text | 對手球隊（`vs NYY` / `@ BOS`） |
 | Opposing_SP | Text | 對手先發投手 |
 | Lineup_Status | Select | 打者：`IN` 在打線 / `OUT` 未上場 / `TBD` 未公布 / `OFF` 休息日；投手：`START` 今日先發 / `TBD` 有賽非先發 / `OFF` 休息日 |
 | Week | Number | Fantasy 週次 |
+| Game_Time | Text | 比賽時間（ET） |
+| defaultSlotRoll | Rollup → DB1 | 從 Player 關聯拉取 Default_Slot（預設守位） |
+| defaultSlotRollVal | Formula | 將 defaultSlotRoll 轉為純文字；空值回傳 "-"，方便篩選排序 |
 
 ---
 
@@ -123,6 +126,10 @@ flowchart TD
 | K | Number | 三振 |
 | ERA | Number | 防禦率 |
 | WHIP | Number | WHIP |
+| HPI | Formula | Hitter Power Index = R + RBI + HR×2 + SB×2 + (AVG−0.250)×1000；打者綜合強度指標 |
+| batterOrPitcherRoll | Rollup → DB1 | 從 Player 關聯拉取 Position_Type（B/P） |
+| defaultSlotRoll | Rollup → DB1 | 從 Player 關聯拉取 Default_Slot（預設守位） |
+| defaultSlotRollVal | Formula | 將 defaultSlotRoll 轉為純文字；空值回傳 "-" |
 
 **Period 使用場景：**
 - `7d` → 當下熱度，決定本週誰先發
@@ -169,6 +176,9 @@ flowchart TD
 ```
 # 每週一 9:00 JST = 0:00 UTC（全量更新）
 0 0 * * 1  cd ~/fantasy-baseball && source venv/bin/activate && python sync/update_roster.py && python sync/update_schedule.py && python sync/update_stats.py ; python sync/sync_log.py
+
+# 每日 18:30 JST = 9:30 UTC（Waiver 結果後同步陣容）
+30 9 * * *  cd ~/fantasy-baseball && venv/bin/python3 sync/update_roster.py > /dev/null 2>&1; venv/bin/python3 sync/sync_log.py > /dev/null 2>&1
 
 # 每小時（22:00–08:00 JST = 13:00–23:00 UTC）打線更新 + 自動換人
 0 13-23 * * *  cd ~/fantasy-baseball && source venv/bin/activate && python sync/update_lineup.py ; python sync/auto_swap.py ; python sync/sync_log.py
@@ -251,3 +261,23 @@ auto_swap.py（update_lineup 之後手動或 cron）
 - Trade Target 的賽程跟自己球員完全相同結構，`add_trade_target.py` 加人後自動補齊本週賽程
 - Yahoo token 存在 RPi 本機 `oauth2.json`，`yahoo_oauth` 自動 refresh
 - Notion API key 存在 RPi 環境變數或 `.env`
+
+---
+
+## 變更紀錄
+
+### 2026-04-17 10:20 JST（Notion AI）
+
+**Fantasy Stats DB 調整**
+
+- 移除 `Period` 欄位的 `14d` 選項（Yahoo API 不支援，避免誤用）
+- 新增 `HPI`（Formula）：Hitter Power Index = R + RBI + HR×2 + SB×2 + (AVG−0.250)×1000，打者綜合強度指標
+- 新增 `batterOrPitcherRoll`（Rollup → DB1.Position_Type）
+- 新增 `defaultSlotRoll`（Rollup → DB1.Default_Slot）
+- 新增 `defaultSlotRollVal`（Formula）：將 defaultSlotRoll 轉純文字，空值回傳 "-"
+
+**Fantasy Schedule DB 調整**
+
+- `batterOrPitcherRoll`、`defaultSlotRoll`、`defaultSlotRollVal` 三個欄位已於稍早手動加入（本次補充文件記錄）
+- `Player_Type（Formula）` 欄位改為 `batterOrPitcherRoll`（Rollup）
+- 新增 `Game_Time`（Text）：比賽時間（ET）

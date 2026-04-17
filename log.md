@@ -118,3 +118,9 @@
 2026-04-16 [Fix] auto_swap.py execute_swaps_async：無有效換人指令的提早 return 路徑只回傳 2 個值（缺少 locked_pids），修正為回傳 (0, fail, locked_pids)
 2026-04-16 [Fix] sync_log.py upsert 邏輯：原本存在就直接「略過」，改為 PATCH 更新 message + status，防止同分鐘重複 key（如手動重跑或 fallback）遮蓋最新結果
 2026-04-16 [Test] Pi 端對端測試通過：auto_swap fallback 正常（Jackson 已鎖 → 排除後重算，Donovan→2B + PCA→OF），sync_log 113 筆全數 PATCH 更新 Notion DB4
+2026-04-16 21:08 [Manual] update_roster.py 手動執行：Ryan Jeffers（BN）+ Jeffrey Springs（P/BN）新增，2 位離隊球員 archive（player_id 11035 & 10748），26/26 成功
+2026-04-16 [Cron] RPi 新增每日 18:30 JST（09:30 UTC）cron：update_roster.py → sync_log.py，承接 Waiver Results 約 17:30 更新後自動同步 Notion
+2026-04-17 [Struct] 新增 0_inbox/ 資料夾供 temp 資料暫存，加入 .gitignore
+2026-04-17 [Schema] DB2 Fantasy Schedule：Player_Type 欄位改為 batterOrPitcherRoll（Rollup），新增 Game_Time / defaultSlotRoll / defaultSlotRollVal
+2026-04-17 [Schema] DB3 Fantasy Stats：新增 HPI（Formula，打者綜合強度指標）/ batterOrPitcherRoll / defaultSlotRoll / defaultSlotRollVal；notion-plan.md 整合 Notion AI 變更紀錄
+2026-04-17 [Fix] notion-plan.md Mermaid 圖表節點換行修正：`\n` 全部改為 `<br/>`（Mermaid 只認識 `<br/>`，`\n` 會顯示成原文）；教訓寫入 CLAUDE.md 踩坑紀錄
