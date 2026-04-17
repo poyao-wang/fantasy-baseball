@@ -2,6 +2,7 @@ oauth2.json
 yahoo_session.json
 cache/
 output/
+0_inbox/
 __pycache__/
 *.pyc
 .env

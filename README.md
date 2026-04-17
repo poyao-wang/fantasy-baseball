@@ -36,6 +36,7 @@ fantasy-baseball/
 │   └── sync_log.py             sync.log → Fantasy Sync Log（每次 cron 末尾）
 ├── data/                 # 靜態資料
 │   └── league_info.json        聯盟設定、積分類別、球隊列表
+├── 0_inbox/              # 暫存資料（不進 git）
 ├── cache/                # 當日 API 快取（自動產生）
 ├── output/               # 輸出 md 檔（自動產生）
 ├── reauth_write.py       # Yahoo OAuth2 重新授權（token 過期時手動執行）
@@ -68,6 +69,7 @@ crash 時記 `ERROR: <訊息>`，方便排查。
 | 時間 | 腳本 | 說明 |
 |------|------|------|
 | 每週一 09:00 | roster → schedule → stats → sync_log | 陣容 / 賽程 / 統計全量更新 |
+| 每日 18:30 | roster → sync_log | Waiver 結果（約 17:30）後自動同步 Notion |
 | 每日 22:00–翌日 08:00，每小時整點 | lineup → auto_swap → sync_log | 打線更新 + 自動換人 |
 
 ## 常用指令
