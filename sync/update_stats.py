@@ -1,6 +1,6 @@
 """
-update_stats.py — 從 Yahoo Fantasy API 拉取球員區間統計，upsert 到 Notion DB3 (Stats)
-upsert key: Title（球員姓名），每人一筆，三個時間窗展開成獨立 property 直接覆蓋
+update_stats.py — 從 Yahoo Fantasy API 拉取球員區間統計，直接 upsert 回 Notion DB1 (Players)
+upsert key: Player_ID（number property）
 periods: 7d (lastweek) / 30d (lastmonth) / season
 注意：Yahoo Fantasy API 不支援 14d 區間（無 last14days 參數），已省略
 執行時機：每週一 9am JST / 手動
@@ -14,7 +14,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).parent))
-from notion_config import NOTION_KEY_PATH, DB_PLAYERS, DB_STATS
+from notion_config import NOTION_KEY_PATH, DB_PLAYERS
 
 LEAGUE_ID = "469.l.171948"
 GAME_ID   = "469"  # MLB 2026
@@ -53,7 +53,7 @@ def notion_headers(key: str) -> dict:
 
 
 def get_all_players(key: str) -> list[dict]:
-    """從 DB1 拉所有球員，回傳含 player_id 的完整 dict"""
+    """從 DB1 拉所有球員，回傳含 player_id 與 page_id 的 dict"""
     url = f"https://api.notion.com/v1/databases/{DB_PLAYERS}/query"
     players = []
     body: dict = {"page_size": 100}
@@ -68,12 +68,11 @@ def get_all_players(key: str) -> list[dict]:
             player_id_raw = props["Player_ID"]["number"]
             position_type = (props["Position_Type"]["select"] or {}).get("name", "B")
             if name and player_id_raw is not None:
-                player_id = int(player_id_raw)
                 players.append({
                     "name":          name,
                     "page_id":       page["id"],
-                    "player_id":     player_id,
-                    "player_key":    f"{GAME_ID}.p.{player_id}",
+                    "player_id":     int(player_id_raw),
+                    "player_key":    f"{GAME_ID}.p.{int(player_id_raw)}",
                     "position_type": position_type,
                 })
         if data.get("has_more"):
@@ -81,27 +80,6 @@ def get_all_players(key: str) -> list[dict]:
         else:
             break
     return players
-
-
-def get_existing_stats_pages(key: str) -> dict[str, str]:
-    """拉 DB3 所有 rows，回傳 {title(球員姓名): page_id}"""
-    url = f"https://api.notion.com/v1/databases/{DB_STATS}/query"
-    body: dict = {"page_size": 100}
-    existing: dict[str, str] = {}
-    while True:
-        r = requests.post(url, headers=notion_headers(key), json=body)
-        r.raise_for_status()
-        data = r.json()
-        for page in data["results"]:
-            title_list = page["properties"]["Title"]["title"]
-            title = title_list[0]["plain_text"] if title_list else ""
-            if title:
-                existing[title] = page["id"]
-        if data.get("has_more"):
-            body["start_cursor"] = data["next_cursor"]
-        else:
-            break
-    return existing
 
 
 # ── 統計解析 ──────────────────────────────────────────────────
@@ -126,49 +104,25 @@ def fmt_stat(value: float | None, fmt: str = "") -> str:
     return format(value, fmt)
 
 
-# ── upsert ────────────────────────────────────────────────────
+# ── upsert stats ──────────────────────────────────────────────
 
-def build_stats_props(
+def patch_player_stats(
+    key: str,
     player: dict,
     all_stats: dict[str, dict[str, float | None]],
-) -> dict:
+) -> None:
     """all_stats = {"7d": {...}, "30d": {...}, "season": {...}}"""
     now_iso = datetime.now(ZoneInfo("Asia/Tokyo")).isoformat()
-
-    props: dict = {
-        "Title":      {"title": [{"text": {"content": player["name"]}}]},
-        "Player":     {"relation": [{"id": player["page_id"]}]},
-        "Player_ID":  {"number": player["player_id"]},
-        "Updated_At": {"date": {"start": now_iso}},
-    }
+    props: dict = {"Stats_Updated_At": {"date": {"start": now_iso}}}
 
     for period_label, stats in all_stats.items():
         for stat, value in stats.items():
             if value is not None:
                 props[f"{stat}_{period_label}"] = {"number": value}
 
-    return props
-
-
-def upsert_stats_row(
-    key: str,
-    player: dict,
-    all_stats: dict[str, dict[str, float | None]],
-    existing: dict[str, str],
-) -> str:
-    props   = build_stats_props(player, all_stats)
-    page_id = existing.get(player["name"])
-
-    if page_id:
-        url = f"https://api.notion.com/v1/pages/{page_id}"
-        r = requests.patch(url, headers=notion_headers(key), json={"properties": props})
-    else:
-        url = "https://api.notion.com/v1/pages"
-        body = {"parent": {"database_id": DB_STATS}, "properties": props}
-        r = requests.post(url, headers=notion_headers(key), json=body)
-
+    url = f"https://api.notion.com/v1/pages/{player['page_id']}"
+    r = requests.patch(url, headers=notion_headers(key), json={"properties": props})
     r.raise_for_status()
-    return "更新" if page_id else "新增"
 
 
 # ── 主程式 ────────────────────────────────────────────────────
@@ -184,19 +138,14 @@ def main():
         gm     = yfa.Game(sc, "mlb")
         league = gm.to_league(LEAGUE_ID)
 
-        print("Notion DB3 Stats 更新\n")
+        print("DB1 Stats 更新\n")
 
         print("[Notion] 拉取 DB1 球員清單...")
         players = get_all_players(notion_key)
         print(f"  → 共 {len(players)} 人\n")
 
-        print("[Notion] 拉取 DB3 現有 rows...")
-        existing = get_existing_stats_pages(notion_key)
-        print(f"  → 共 {len(existing)} 筆\n")
-
         yahoo_ids = [str(p["player_id"]) for p in players]
 
-        # 先把三個 period 的 raw stats 全拉回來
         stats_by_period: dict[str, dict[int, dict]] = {}
         for period_label, req_type in PERIODS:
             print(f"[Yahoo] 拉取 {period_label}（{req_type}）stats...")
@@ -223,7 +172,7 @@ def main():
             }
 
             try:
-                action = upsert_stats_row(notion_key, player, all_stats, existing)
+                patch_player_stats(notion_key, player, all_stats)
                 s7 = all_stats["7d"]
                 if pos == "B":
                     summary = (
@@ -241,13 +190,13 @@ def main():
                         f"SV={fmt_stat(s7.get('SV'))}  "
                         f"K={fmt_stat(s7.get('K'))}"
                     )
-                print(f"  [{action}] {player['name']:<28} 7d: {summary}")
+                print(f"  [更新] {player['name']:<28} 7d: {summary}")
                 ok += 1
             except Exception as e:
                 print(f"  [錯誤] {player['name']}: {e}")
                 fail += 1
 
-        print(f"\n完成：{ok} 成功 / {fail} 失敗  →  Notion DB3 Stats")
+        print(f"\n完成：{ok} 成功 / {fail} 失敗  →  Notion DB1 Stats")
         _append_sync_log(f"[update_stats] {ok} 成功 / {fail} 失敗")
     except Exception as e:
         _append_sync_log(f"[update_stats] ERROR: {e}")

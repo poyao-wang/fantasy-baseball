@@ -16,9 +16,8 @@ flowchart TD
     end
 
     subgraph Notion["Notion DB"]
-        DB1[("Fantasy Roster<br/>所有球員<br/>My Roster + Trade Target")]
+        DB1[("Fantasy Roster<br/>所有球員 + 區間 Stats<br/>My Roster + Trade Target")]
         DB2[("Fantasy Schedule<br/>每日賽況")]
-        DB3[("Fantasy Stats<br/>區間快照 7d/30d/season")]
         DB4[("Fantasy Sync Log<br/>腳本執行紀錄")]
     end
 
@@ -35,9 +34,8 @@ flowchart TD
     M -->|schedule / starter| S1
     M -->|lineups| S2
     Y -->|target player info| S3
-    S1 -->|upsert| DB1
+    S1 -->|upsert 球員資訊 + stats| DB1
     S1 -->|建立當週 rows| DB2
-    S1 -->|upsert 球員數據 每人1筆| DB3
     S1 -->|sync_log| DB4
     S2 -->|更新 Lineup_Status + auto_swap| DB2
     S2 -->|sync_log| DB4
@@ -47,11 +45,8 @@ flowchart TD
     DB2 --> V2
     DB2 --> V3
     DB1 --> V4
-    DB3 --> V4
     DB1 --> V5
-    DB3 --> V5
     DB1 -.->|Relation| DB2
-    DB1 -.->|Relation| DB3
 ```
 
 ---
@@ -76,6 +71,19 @@ flowchart TD
 | Status | Select | Healthy / DTD / IL |
 | Notes | Text | 交易筆記、分析備忘 |
 | Player_ID | Number | Yahoo player_id（upsert key） |
+| Stats_Updated_At | Date | stats 最後更新時間 |
+| **打者 Stats** | | |
+| AVG_7d / AVG_30d / AVG_season | Number | 打擊率（三區間） |
+| HR_7d / HR_30d / HR_season | Number | 全壘打 |
+| RBI_7d / RBI_30d / RBI_season | Number | 打點 |
+| R_7d / R_30d / R_season | Number | 得分 |
+| SB_7d / SB_30d / SB_season | Number | 盜壘 |
+| **投手 Stats** | | |
+| W_7d / W_30d / W_season | Number | 勝投 |
+| SV_7d / SV_30d / SV_season | Number | 救援 |
+| K_7d / K_30d / K_season | Number | 三振 |
+| ERA_7d / ERA_30d / ERA_season | Number | 防禦率 |
+| WHIP_7d / WHIP_30d / WHIP_season | Number | WHIP |
 
 ---
 
@@ -103,44 +111,13 @@ flowchart TD
 
 ---
 
-### DB3：Fantasy Stats（區間數據）
-
-每週一更新，每個球員 **1 筆**，三個時間窗的 stat 展開成獨立 property。
-每次直接覆蓋同一筆，不保留歷史（舊數據無參考價值）。
-注意：Yahoo API 不支援 14d 區間（無 last14days 參數），已省略。
-
-| Property | 類型 | 說明 |
-|----------|------|------|
-| Title | Title | 球員姓名（upsert key） |
-| Player_ID | Number | Yahoo player_id（batch query 用） |
-| Player | Relation → DB1 | 關聯球員 |
-| Updated_At | Date | 資料更新時間 |
-| **打者** | | |
-| AVG_7d / AVG_30d / AVG_season | Number | 打擊率（三區間） |
-| HR_7d / HR_30d / HR_season | Number | 全壘打 |
-| RBI_7d / RBI_30d / RBI_season | Number | 打點 |
-| R_7d / R_30d / R_season | Number | 得分 |
-| SB_7d / SB_30d / SB_season | Number | 盜壘 |
-| **投手** | | |
-| W_7d / W_30d / W_season | Number | 勝投 |
-| SV_7d / SV_30d / SV_season | Number | 救援 |
-| K_7d / K_30d / K_season | Number | 三振 |
-| ERA_7d / ERA_30d / ERA_season | Number | 防禦率 |
-| WHIP_7d / WHIP_30d / WHIP_season | Number | WHIP |
-| batterOrPitcherRoll | Rollup → DB1 | 從 Player 關聯拉取 Position_Type（B/P） |
-| eligiblePositionsRoll | Rollup → DB1 | 從 Player 關聯拉取 Eligible_Positions（可守位置，multi-select） |
-
-**Yahoo API 對應：** `stat_type=lastweek`（7d） / `lastmonth`（30d） / `season`
-
----
-
 ## 腳本規劃
 
 | 腳本 | 觸發 | 說明 |
 |------|------|------|
 | `update_roster.py` | 每週一 / 手動 | 從 Yahoo API 拉自己陣容，upsert DB1；upsert 後自動比對 Notion My Roster，archive 已離隊球員 |
 | `update_schedule.py` | 每週一 | 建立 DB1 所有球員的當週 DB2 rows |
-| `update_stats.py` | 每週一 | 從 Yahoo API 拉數據，upsert DB3 |
+| `update_stats.py` | 每週一 | 從 Yahoo API 拉數據，patch DB1 stats 欄位（_7d/_30d/_season） |
 | `update_lineup.py` | 每小時 22–08 JST | Yahoo API 同步 DB1 Current_Slot + MLB API 更新 DB2 今日 Lineup_Status |
 | `add_trade_target.py` | 手動 | 輸入球員姓名 → 查 Yahoo API → upsert DB1 + 建立 DB2 本週賽程 |
 | `yahoo_playwright.py` | 手動（首次 / session 過期） | Yahoo 瀏覽器登入，session 存 yahoo_session.json |
@@ -160,8 +137,8 @@ flowchart TD
 | 傷兵追蹤 | DB1 | Table | Status ≠ Healthy |
 | 今日賽況 | DB2 | Table | Date = Today，sort by Lineup_Status |
 | 本週對戰 | DB2 | Calendar | 本週，by Date |
-| 交易分析板 | DB1 | Table | Player_Type = Trade Target，顯示 Eligible_Positions + Notes |
-| 同位置比較 | DB3 | Table | filter by Eligible_Positions，My Roster vs Trade Target 並列 |
+| 交易分析板 | DB1 | Table | Player_Type = Trade Target，顯示 Eligible_Positions + Notes + Stats |
+| 同位置比較 | DB1 | Table | filter by Eligible_Positions，My Roster vs Trade Target 並列 |
 
 ---
 
@@ -251,7 +228,7 @@ auto_swap.py（update_lineup 之後手動或 cron）
 
 - DB1 用 `Player_ID` 做 upsert key
 - DB2 用 `Title`（姓名＋日期）做 upsert key
-- DB3 用 `Title`（球員姓名）做 upsert key，每人一筆直接覆蓋
+- DB3 已整合進 DB1，stats 直接 PATCH DB1 對應球員的 page
 - Trade Target 的賽程跟自己球員完全相同結構，`add_trade_target.py` 加人後自動補齊本週賽程
 - Yahoo token 存在 RPi 本機 `oauth2.json`，`yahoo_oauth` 自動 refresh
 - Notion API key 存在 RPi 環境變數或 `.env`
