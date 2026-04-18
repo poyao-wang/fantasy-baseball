@@ -70,6 +70,12 @@
   - [x] locked_pids fallback：被鎖球員排除後重算次優計畫（如 Donovan→2B + PCA→OF）
   - [x] swap_logic Phase 2.5 改用 effective slot（Phase 1 restore 球員可參與 chain swap）
   - [x] swap_logic 新增 excluded_pids 參數供 fallback 使用
+- [x] Step 4.8：sync_log.py Notion 429 rate limit 修正
+  - [x] 改用 cursor 機制（sync.log.cursor），只同步新增行（1–3 筆/次，原本全量 182 筆）
+  - [x] 加入 429 自動 retry（指數退避 5/10/20s，最多 3 次）
+- [x] Step 4.9：全腳本 Notion API 429 風險審查 + update_roster.py batch query 優化
+  - [x] 診斷所有 sync 腳本 API 呼叫模式（update_lineup / stats / schedule 無問題）
+  - [x] update_roster.py：刪除 find_page_by_player_id 逐筆 query，改用 fetch_all_my_roster_pages batch 共用（query 27→1）；Pi5 測試通過
 - [ ] Step 5：投手策略（依本週 H2H 領先程度決定是否保護 ERA/WHIP）
 
 ### 其他功能

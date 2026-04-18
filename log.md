@@ -100,6 +100,10 @@
 2026-04-14  swap_logic 換回邏輯修正。原本只有「替補（Replace）」邏輯，缺少換回機制，導致 Vlad Jr. 滯留 BN、Caratini 佔著 1B，以及 Riley↔Muncy 互換錯位問題。新增三階段邏輯：Phase 0 Rebalance（先發格互換對調）、Phase 1 Restore（從 BN 換回預設位）、Phase 2 Replace（原有替補）。auto_swap.py 支援 out_slot 非 BN 情況。RPi 實測三個換人全部成功，Notion 同步正常。
 
 2026-04-15  update_roster.py 除錯：換掉 Abner Uribe 後 Notion 名單仍殘留舊資料，原因是 update_roster.py 只做 upsert 從不清除離隊球員。修正：新增 `fetch_all_my_roster_pages()` 抓取 Notion 所有 My Roster pages，與 Yahoo 現有陣容比對，不在陣容的 pages 呼叫 `archive_page()` 自動移除。執行後 Abner Uribe（player_id=12746）成功 archive，新人 Jeremiah Jackson 自動新增，26/26 全數正確。另新增交易目標 José Caballero（NYY，2B/3B/SS/OF）。
+
+2026-04-18  sync_log Notion 429 rate limit 事故與修正。查 Pi sync.log 確認 4/17 09:30 update_roster 本地成功（26→27人），但 Notion DB4 Sync Log 無紀錄。跑 sync_log.py 手動測試發現根因：全量 182 筆同步 × 每小時 3 次 cron = 大量 API calls，4/16 05:00 開始 DB4 持續 429。修正 sync_log.py 改用 cursor 機制（sync.log.cursor 記行數，只送新行），歷史 182 筆補回 Notion 全數成功。
+
+2026-04-18  全腳本 429 風險審查 + update_roster.py 優化。診斷：update_lineup / update_stats / update_schedule 均已為 batch query 設計，無風險；唯 update_roster.py 的 upsert_player 對每位球員各打一次獨立 query（27 次/執行）。重構：刪除 find_page_by_player_id，改為執行前 1 次 batch 拉完 DB1 現有陣容，upsert 和清除共用同一份 dict（27→1 query）。Pi5 測試 27/27 成功。
 2026-04-16  auto_swap 連環 bug 除錯修正。4/15 Altuve（OUT）未被自動換人，查 RPi journalctl 確認根因：22:00 JST Playwright timeout、23:00 JST Yahoo OAuth expired 兩個問題連發，整個換人窗口被封。修正三處：① Playwright timeout 20s→60s + retry 3 次；② Yahoo API 403 retry + force refresh；③ auto_swap fallback 機制（Jackson 被鎖 → 自動排除重算 → Donovan→2B + PCA→OF）。swap_logic Phase 2.5 同步修正，改用 effective slot 讓 Phase 1 restore 球員也能參與 chain swap。
 2026-04-16  swap_logic / update_lineup 重大修正與功能擴充。發現兩個 bug：①Phase 2 用 default_slot 判斷空格，導致已在 BN 的 Muncy 仍觸發 3B 換人，Riley 被多餘移動；②update_lineup 的 any_lineup_published 全域旗標，導致東岸球隊打線先公布後，西岸球隊 Will Smith / Donovan 等全被誤標 OUT。修正：Phase 2 改用 current_slot 判斷；update_lineup 改為撈已公布打線球隊的完整 roster 做 per-team 判斷。新功能：Phase 2.5 Chain Swap（連鎖換人），BN 無替補時從先發格拉人（如 Jackson→2B、PCA→OF）。auto_swap 新增 out_slot 合法性檢查防止鎖定球員造成 chain swap 孤立。cron 修正：sync_log 改用 ; 確保每次都推送 Notion。
 
@@ -124,3 +128,8 @@
 2026-04-17 [Schema] DB2 Fantasy Schedule：Player_Type 欄位改為 batterOrPitcherRoll（Rollup），新增 Game_Time / defaultSlotRoll / defaultSlotRollVal
 2026-04-17 [Schema] DB3 Fantasy Stats：新增 HPI（Formula，打者綜合強度指標）/ batterOrPitcherRoll / defaultSlotRoll / defaultSlotRollVal；notion-plan.md 整合 Notion AI 變更紀錄
 2026-04-17 [Fix] notion-plan.md Mermaid 圖表節點換行修正：`\n` 全部改為 `<br/>`（Mermaid 只認識 `<br/>`，`\n` 會顯示成原文）；教訓寫入 CLAUDE.md 踩坑紀錄
+2026-04-18 [Debug] Notion DB4 429 rate limit 根因診斷：sync_log.py 每次全量同步所有 log（最多 182 筆），每筆需 1 次 query API call，每小時 3 次 cron = 546+ calls，4/16 05:00 起觸發持續 rate limit，所有腳本 Sync Log 均無法寫入 Notion
+2026-04-18 [Fix] sync_log.py 改為 cursor 機制：sync.log.cursor 記錄已同步行數，每次只處理新增行（1–3 筆/次），根除 429 問題；同時加入 429 自動 retry（指數退避 5/10/20s，最多 3 次）
+2026-04-18 [Manual] update_roster.py 手動執行：Notion DB1 更新至 27 人（新球員已補入），Fantasy Sync Log 歷史 182 筆全數補回 Notion DB4
+2026-04-18 [Audit] 全腳本 Notion API 429 風險診斷：update_lineup / update_stats / update_schedule 已為 batch 設計無風險；update_roster.py 存在 find_page_by_player_id 逐筆 query 問題（27 次/執行）
+2026-04-18 [Refactor] update_roster.py：刪除 find_page_by_player_id 逐筆 query，改用 fetch_all_my_roster_pages batch 預載共用（upsert + 清除），Notion query 27 → 1；Pi5 測試 27/27 通過

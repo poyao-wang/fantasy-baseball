@@ -98,6 +98,8 @@ flowchart TD
 | Game_Time | Text | 比賽時間（ET） |
 | defaultSlotRoll | Rollup → DB1 | 從 Player 關聯拉取 Default_Slot（預設守位） |
 | defaultSlotRollVal | Formula | 將 defaultSlotRoll 轉為純文字；空值回傳 "-"，方便篩選排序 |
+| currentSlotRoll | Rollup → DB1 | 從 Player 關聯拉取 Current_Slot（球員目前實際放的格子） |
+| eligiblePositionsRoll | Rollup → DB1 | 從 Player 關聯拉取 Eligible_Positions（可守位置，multi-select） |
 
 ---
 
@@ -130,6 +132,8 @@ flowchart TD
 | batterOrPitcherRoll | Rollup → DB1 | 從 Player 關聯拉取 Position_Type（B/P） |
 | defaultSlotRoll | Rollup → DB1 | 從 Player 關聯拉取 Default_Slot（預設守位） |
 | defaultSlotRollVal | Formula | 將 defaultSlotRoll 轉為純文字；空值回傳 "-" |
+| currentSlotRoll | Rollup → DB1 | 從 Player 關聯拉取 Current_Slot（球員目前實際放的格子） |
+| eligiblePositionsRoll | Rollup → DB1 | 從 Player 關聯拉取 Eligible_Positions（可守位置，multi-select） |
 
 **Period 使用場景：**
 - `7d` → 當下熱度，決定本週誰先發
@@ -153,7 +157,7 @@ flowchart TD
 | `setup_default_slot.py` | 手動（一次性） | DB1 Default_Slot 從 Current_Slot 初始化 |
 | `swap_logic.py` | 被 auto_swap.py import | 四階段換人邏輯（Rebalance / Restore / Replace / Chain Swap） |
 | `auto_swap.py` | 每小時 22–08 JST（update_lineup 之後） | Playwright 執行換人，支援 --dry-run，fallback locked_pids，結果寫 sync.log |
-| `sync_log.py` | 每小時 / 週一全量末尾 | sync.log → DB4 Fantasy Sync Log（upsert：新增 or PATCH 更新） |
+| `sync_log.py` | 每小時 / 週一全量末尾 | sync.log → DB4 Fantasy Sync Log；cursor 機制（sync.log.cursor）只送新增行，429 自動 retry |
 
 ---
 
@@ -261,23 +265,3 @@ auto_swap.py（update_lineup 之後手動或 cron）
 - Trade Target 的賽程跟自己球員完全相同結構，`add_trade_target.py` 加人後自動補齊本週賽程
 - Yahoo token 存在 RPi 本機 `oauth2.json`，`yahoo_oauth` 自動 refresh
 - Notion API key 存在 RPi 環境變數或 `.env`
-
----
-
-## 變更紀錄
-
-### 2026-04-17 10:20 JST（Notion AI）
-
-**Fantasy Stats DB 調整**
-
-- 移除 `Period` 欄位的 `14d` 選項（Yahoo API 不支援，避免誤用）
-- 新增 `HPI`（Formula）：Hitter Power Index = R + RBI + HR×2 + SB×2 + (AVG−0.250)×1000，打者綜合強度指標
-- 新增 `batterOrPitcherRoll`（Rollup → DB1.Position_Type）
-- 新增 `defaultSlotRoll`（Rollup → DB1.Default_Slot）
-- 新增 `defaultSlotRollVal`（Formula）：將 defaultSlotRoll 轉純文字，空值回傳 "-"
-
-**Fantasy Schedule DB 調整**
-
-- `batterOrPitcherRoll`、`defaultSlotRoll`、`defaultSlotRollVal` 三個欄位已於稍早手動加入（本次補充文件記錄）
-- `Player_Type（Formula）` 欄位改為 `batterOrPitcherRoll`（Rollup）
-- 新增 `Game_Time`（Text）：比賽時間（ET）

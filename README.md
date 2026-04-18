@@ -33,7 +33,7 @@ fantasy-baseball/
 │   ├── setup_default_slot.py   Fantasy Roster Default_Slot 初始化（一次性）
 │   ├── swap_logic.py           OFF/OUT 偵測 → BN 候補依 7d 評分排名 → swap 清單
 │   ├── auto_swap.py            Playwright 執行換人，支援 --dry-run，結果寫入 sync.log
-│   └── sync_log.py             sync.log → Fantasy Sync Log（每次 cron 末尾）
+│   └── sync_log.py             sync.log → Fantasy Sync Log（cursor 機制，只送新行；429 retry）
 ├── data/                 # 靜態資料
 │   └── league_info.json        聯盟設定、積分類別、球隊列表
 ├── 0_inbox/              # 暫存資料（不進 git）
