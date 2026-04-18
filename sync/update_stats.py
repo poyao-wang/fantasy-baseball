@@ -1,6 +1,6 @@
 """
 update_stats.py — 從 Yahoo Fantasy API 拉取球員區間統計，upsert 到 Notion DB3 (Stats)
-upsert key: Title（`{Name} W{week} {period}`，例：Altuve W3 7d）
+upsert key: Title（球員姓名），每人一筆，三個時間窗展開成獨立 property 直接覆蓋
 periods: 7d (lastweek) / 30d (lastmonth) / season
 注意：Yahoo Fantasy API 不支援 14d 區間（無 last14days 參數），已省略
 執行時機：每週一 9am JST / 手動
@@ -19,7 +19,6 @@ from notion_config import NOTION_KEY_PATH, DB_PLAYERS, DB_STATS
 LEAGUE_ID = "469.l.171948"
 GAME_ID   = "469"  # MLB 2026
 
-# Yahoo API 支援的 stat_type → 我們的 period label
 PERIODS = [
     ("7d",     "lastweek"),
     ("30d",    "lastmonth"),
@@ -84,13 +83,10 @@ def get_all_players(key: str) -> list[dict]:
     return players
 
 
-def get_existing_stats_titles(key: str, week: int) -> dict[str, str]:
-    """拉 DB3 本週所有 rows，回傳 {title: page_id}（batch query 減少 API 呼叫）"""
+def get_existing_stats_pages(key: str) -> dict[str, str]:
+    """拉 DB3 所有 rows，回傳 {title(球員姓名): page_id}"""
     url = f"https://api.notion.com/v1/databases/{DB_STATS}/query"
-    body: dict = {
-        "page_size": 100,
-        "filter": {"property": "Week", "number": {"equals": week}},
-    }
+    body: dict = {"page_size": 100}
     existing: dict[str, str] = {}
     while True:
         r = requests.post(url, headers=notion_headers(key), json=body)
@@ -111,7 +107,6 @@ def get_existing_stats_titles(key: str, week: int) -> dict[str, str]:
 # ── 統計解析 ──────────────────────────────────────────────────
 
 def parse_stat(raw) -> float | None:
-    """把各種格式的 stat value 轉成 float；空值、'-' 回傳 None"""
     if raw is None or raw == "" or raw == "-":
         return None
     try:
@@ -121,10 +116,6 @@ def parse_stat(raw) -> float | None:
 
 
 def extract_stats(player_data: dict, position_type: str) -> dict[str, float | None]:
-    """
-    從 yahoo-fantasy-api player_stats 回傳的 dict 提取本聯盟積分類別數據。
-    library 已依 stat_categories 將 stat_id 映射為 display_name（R / HR / AVG…）作為 key。
-    """
     target = BATTER_STATS if position_type == "B" else PITCHER_STATS
     return {stat: parse_stat(player_data.get(stat)) for stat in target}
 
@@ -139,25 +130,22 @@ def fmt_stat(value: float | None, fmt: str = "") -> str:
 
 def build_stats_props(
     player: dict,
-    period: str,
-    week: int,
-    stats: dict[str, float | None],
+    all_stats: dict[str, dict[str, float | None]],
 ) -> dict:
-    title   = f"{player['name']} W{week} {period}"
+    """all_stats = {"7d": {...}, "30d": {...}, "season": {...}}"""
     now_iso = datetime.now(ZoneInfo("Asia/Tokyo")).isoformat()
 
     props: dict = {
-        "Title":      {"title": [{"text": {"content": title}}]},
+        "Title":      {"title": [{"text": {"content": player["name"]}}]},
         "Player":     {"relation": [{"id": player["page_id"]}]},
-        "Week":       {"number": week},
-        "Period":     {"select": {"name": period}},
+        "Player_ID":  {"number": player["player_id"]},
         "Updated_At": {"date": {"start": now_iso}},
     }
 
-    # 只寫入非 None 欄位，避免用空值覆蓋無關位置類型的欄位
-    for stat, value in stats.items():
-        if value is not None:
-            props[stat] = {"number": value}
+    for period_label, stats in all_stats.items():
+        for stat, value in stats.items():
+            if value is not None:
+                props[f"{stat}_{period_label}"] = {"number": value}
 
     return props
 
@@ -165,15 +153,11 @@ def build_stats_props(
 def upsert_stats_row(
     key: str,
     player: dict,
-    period: str,
-    week: int,
-    stats: dict[str, float | None],
+    all_stats: dict[str, dict[str, float | None]],
     existing: dict[str, str],
 ) -> str:
-    """存在則 PATCH，不存在則 POST。回傳 '更新' 或 '新增'"""
-    title   = f"{player['name']} W{week} {period}"
-    props   = build_stats_props(player, period, week, stats)
-    page_id = existing.get(title)
+    props   = build_stats_props(player, all_stats)
+    page_id = existing.get(player["name"])
 
     if page_id:
         url = f"https://api.notion.com/v1/pages/{page_id}"
@@ -199,68 +183,71 @@ def main():
 
         gm     = yfa.Game(sc, "mlb")
         league = gm.to_league(LEAGUE_ID)
-        week   = league.current_week()
 
-        print(f"Fantasy Week {week}  →  Notion DB3 Stats\n")
+        print("Notion DB3 Stats 更新\n")
 
         print("[Notion] 拉取 DB1 球員清單...")
         players = get_all_players(notion_key)
         print(f"  → 共 {len(players)} 人\n")
 
-        print("[Notion] 拉取 DB3 本週已存在 rows...")
-        existing = get_existing_stats_titles(notion_key, week)
-        print(f"  → 本週已存在 {len(existing)} 筆\n")
+        print("[Notion] 拉取 DB3 現有 rows...")
+        existing = get_existing_stats_pages(notion_key)
+        print(f"  → 共 {len(existing)} 筆\n")
 
-        yahoo_ids   = [str(p["player_id"]) for p in players]
-        ok, fail    = 0, 0
+        yahoo_ids = [str(p["player_id"]) for p in players]
 
+        # 先把三個 period 的 raw stats 全拉回來
+        stats_by_period: dict[str, dict[int, dict]] = {}
         for period_label, req_type in PERIODS:
             print(f"[Yahoo] 拉取 {period_label}（{req_type}）stats...")
             try:
-                raw_stats = league.player_stats(yahoo_ids, req_type)
+                raw = league.player_stats(yahoo_ids, req_type)
+                stats_by_period[period_label] = {
+                    item["player_id"]: item
+                    for item in raw
+                    if "player_id" in item
+                }
+                print(f"  → 取得 {len(stats_by_period[period_label])} 人\n")
             except Exception as e:
                 print(f"  [錯誤] 無法取得 {period_label} stats: {e}\n")
-                continue
+                stats_by_period[period_label] = {}
 
-            stats_by_id: dict[int, dict] = {
-                item["player_id"]: item
-                for item in raw_stats
-                if "player_id" in item
+        ok, fail = 0, 0
+        for player in players:
+            pid = player["player_id"]
+            pos = player["position_type"]
+
+            all_stats = {
+                label: extract_stats(stats_by_period.get(label, {}).get(pid, {}), pos)
+                for label, _ in PERIODS
             }
-            print(f"  → 取得 {len(stats_by_id)} 人數據\n")
 
-            for player in players:
-                player_data = stats_by_id.get(player["player_id"], {})
-                stats       = extract_stats(player_data, player["position_type"])
-                try:
-                    action = upsert_stats_row(
-                        notion_key, player, period_label, week, stats, existing
+            try:
+                action = upsert_stats_row(notion_key, player, all_stats, existing)
+                s7 = all_stats["7d"]
+                if pos == "B":
+                    summary = (
+                        f"AVG={fmt_stat(s7.get('AVG'), '.3f')}  "
+                        f"HR={fmt_stat(s7.get('HR'))}  "
+                        f"R={fmt_stat(s7.get('R'))}  "
+                        f"RBI={fmt_stat(s7.get('RBI'))}  "
+                        f"SB={fmt_stat(s7.get('SB'))}"
                     )
-                    if player["position_type"] == "B":
-                        summary = (
-                            f"AVG={fmt_stat(stats.get('AVG'), '.3f')}  "
-                            f"HR={fmt_stat(stats.get('HR'))}  "
-                            f"R={fmt_stat(stats.get('R'))}  "
-                            f"RBI={fmt_stat(stats.get('RBI'))}  "
-                            f"SB={fmt_stat(stats.get('SB'))}"
-                        )
-                    else:
-                        summary = (
-                            f"ERA={fmt_stat(stats.get('ERA'), '.2f')}  "
-                            f"WHIP={fmt_stat(stats.get('WHIP'), '.3f')}  "
-                            f"W={fmt_stat(stats.get('W'))}  "
-                            f"SV={fmt_stat(stats.get('SV'))}  "
-                            f"K={fmt_stat(stats.get('K'))}"
-                        )
-                    print(f"  [{action}] {player['name']:<28} {period_label}  {summary}")
-                    ok += 1
-                except Exception as e:
-                    print(f"  [錯誤] {player['name']} {period_label}: {e}")
-                    fail += 1
+                else:
+                    summary = (
+                        f"ERA={fmt_stat(s7.get('ERA'), '.2f')}  "
+                        f"WHIP={fmt_stat(s7.get('WHIP'), '.3f')}  "
+                        f"W={fmt_stat(s7.get('W'))}  "
+                        f"SV={fmt_stat(s7.get('SV'))}  "
+                        f"K={fmt_stat(s7.get('K'))}"
+                    )
+                print(f"  [{action}] {player['name']:<28} 7d: {summary}")
+                ok += 1
+            except Exception as e:
+                print(f"  [錯誤] {player['name']}: {e}")
+                fail += 1
 
-            print()
-
-        print(f"完成：{ok} 成功 / {fail} 失敗  →  Notion DB3 Stats")
+        print(f"\n完成：{ok} 成功 / {fail} 失敗  →  Notion DB3 Stats")
         _append_sync_log(f"[update_stats] {ok} 成功 / {fail} 失敗")
     except Exception as e:
         _append_sync_log(f"[update_stats] ERROR: {e}")

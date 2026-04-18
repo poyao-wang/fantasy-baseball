@@ -37,7 +37,7 @@ flowchart TD
     Y -->|target player info| S3
     S1 -->|upsert| DB1
     S1 -->|建立當週 rows| DB2
-    S1 -->|upsert 區間快照 x3| DB3
+    S1 -->|upsert 球員數據 每人1筆| DB3
     S1 -->|sync_log| DB4
     S2 -->|更新 Lineup_Status + auto_swap| DB2
     S2 -->|sync_log| DB4
@@ -103,44 +103,34 @@ flowchart TD
 
 ---
 
-### DB3：Fantasy Stats（區間快照數據）
+### DB3：Fantasy Stats（區間數據）
 
-每週一更新，每個球員每週存 3 筆（3 個時間窗），用來對比交易目標與自己球員的數據。
-累積數據到中後期參考價值低，改用區間快照才能反映當下狀態與趨勢。
+每週一更新，每個球員 **1 筆**，三個時間窗的 stat 展開成獨立 property。
+每次直接覆蓋同一筆，不保留歷史（舊數據無參考價值）。
 注意：Yahoo API 不支援 14d 區間（無 last14days 參數），已省略。
 
 | Property | 類型 | 說明 |
 |----------|------|------|
-| Title | Title | `姓名 W{週次} {period}`（upsert key，例：`Altuve W15 7d`） |
+| Title | Title | 球員姓名（upsert key） |
+| Player_ID | Number | Yahoo player_id（batch query 用） |
 | Player | Relation → DB1 | 關聯球員 |
-| Week | Number | 更新的 Fantasy 週次 |
-| Period | Select | `7d` / `30d` / `season` |
 | Updated_At | Date | 資料更新時間 |
 | **打者** | | |
-| AVG | Number | 打擊率 |
-| HR | Number | 全壘打 |
-| RBI | Number | 打點 |
-| R | Number | 得分 |
-| SB | Number | 盜壘 |
+| AVG_7d / AVG_30d / AVG_season | Number | 打擊率（三區間） |
+| HR_7d / HR_30d / HR_season | Number | 全壘打 |
+| RBI_7d / RBI_30d / RBI_season | Number | 打點 |
+| R_7d / R_30d / R_season | Number | 得分 |
+| SB_7d / SB_30d / SB_season | Number | 盜壘 |
 | **投手** | | |
-| W | Number | 勝投 |
-| SV | Number | 救援 |
-| K | Number | 三振 |
-| ERA | Number | 防禦率 |
-| WHIP | Number | WHIP |
-| HPI | Formula | Hitter Power Index = R + RBI + HR×2 + SB×2 + (AVG−0.250)×1000；打者綜合強度指標 |
+| W_7d / W_30d / W_season | Number | 勝投 |
+| SV_7d / SV_30d / SV_season | Number | 救援 |
+| K_7d / K_30d / K_season | Number | 三振 |
+| ERA_7d / ERA_30d / ERA_season | Number | 防禦率 |
+| WHIP_7d / WHIP_30d / WHIP_season | Number | WHIP |
 | batterOrPitcherRoll | Rollup → DB1 | 從 Player 關聯拉取 Position_Type（B/P） |
-| defaultSlotRoll | Rollup → DB1 | 從 Player 關聯拉取 Default_Slot（預設守位） |
-| defaultSlotRollVal | Formula | 將 defaultSlotRoll 轉為純文字；空值回傳 "-" |
-| currentSlotRoll | Rollup → DB1 | 從 Player 關聯拉取 Current_Slot（球員目前實際放的格子） |
 | eligiblePositionsRoll | Rollup → DB1 | 從 Player 關聯拉取 Eligible_Positions（可守位置，multi-select） |
 
-**Period 使用場景：**
-- `7d` → 當下熱度，決定本週誰先發
-- `30d` → 過濾短期噪音，看真實水準
-- `season` → 全季基準，做最終比較
-
-**Yahoo API 對應：** `stat_type=lastweek` / `lastmonth` / `season`（不支援 14d）
+**Yahoo API 對應：** `stat_type=lastweek`（7d） / `lastmonth`（30d） / `season`
 
 ---
 
@@ -261,7 +251,7 @@ auto_swap.py（update_lineup 之後手動或 cron）
 
 - DB1 用 `Player_ID` 做 upsert key
 - DB2 用 `Title`（姓名＋日期）做 upsert key
-- DB3 用 `Title`（姓名＋週次＋period，例：`Altuve W15 7d`）做 upsert key
+- DB3 用 `Title`（球員姓名）做 upsert key，每人一筆直接覆蓋
 - Trade Target 的賽程跟自己球員完全相同結構，`add_trade_target.py` 加人後自動補齊本週賽程
 - Yahoo token 存在 RPi 本機 `oauth2.json`，`yahoo_oauth` 自動 refresh
 - Notion API key 存在 RPi 環境變數或 `.env`
