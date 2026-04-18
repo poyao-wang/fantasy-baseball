@@ -37,7 +37,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).parent))
-from notion_config import NOTION_KEY_PATH, DB_PLAYERS, DB_SCHEDULE
+from notion_config import NOTION_KEY_PATH, DB_PLAYERS
 
 # 計分的先發格（不含 BN / IL / SP / RP / P）
 STARTING_SLOTS = {"C", "1B", "2B", "3B", "SS", "OF", "Util"}
@@ -106,34 +106,15 @@ def get_all_batters(key: str) -> dict[int, dict]:
         current_slot = (props["Current_Slot"]["select"] or {}).get("name", "BN")
         eligible = [m["name"] for m in props["Eligible_Positions"]["multi_select"]]
         status = (props["Status"]["select"] or {}).get("name", "Healthy")
+        today_status = (props.get("Today_Status", {}).get("select") or {}).get("name", "TBD")
         result[pid] = {
             "name": name,
             "default_slot": default_slot,
             "current_slot": current_slot,
             "eligible_positions": eligible,
             "status": status,
+            "today_status": today_status,
         }
-    return result
-
-
-def get_today_lineup_status(key: str, today_str: str) -> dict[str, str]:
-    """
-    DB2: 今日所有 rows
-    回傳 {player_name: lineup_status}
-    """
-    pages = _query_all(key, DB_SCHEDULE, {
-        "page_size": 100,
-        "filter": {"property": "Date", "date": {"equals": today_str}},
-    })
-    result: dict[str, str] = {}
-    for page in pages:
-        props = page["properties"]
-        title_list = props["Title"]["title"]
-        title = title_list[0]["plain_text"] if title_list else ""
-        name = title.replace(f" {today_str}", "").strip()
-        status = (props["Lineup_Status"]["select"] or {}).get("name", "TBD")
-        if name:
-            result[name] = status
     return result
 
 
@@ -166,15 +147,12 @@ def get_7d_scores(key: str, player_ids: set[int], name_to_id: dict[str, int]) ->
 
 def compute_swap_plan(
     batters: dict[int, dict],
-    today_statuses: dict[str, str],
     scores: dict[int, float],
 ) -> list[dict]:
     """
-    產生 swap 清單（Phase 1 換回 + Phase 2 替補）。
+    產生 swap 清單（Phase 0 Rebalance + Phase 1 Restore + Phase 2 Replace + Phase 2.5 Chain Swap）。
+    today_status 已內含於 batters（從 DB1 Today_Status 讀取）。
     """
-    # 加上今日狀態
-    for pid, info in batters.items():
-        info["today_status"] = today_statuses.get(info["name"], "TBD")
 
     # 建立 slot → 目前佔用者清單（先發格才追蹤）
     slot_occupants: dict[str, list[dict]] = {}
@@ -470,18 +448,12 @@ def get_swap_plan(
     name_to_id = {info["name"]: pid for pid, info in batters.items()}
 
     if verbose:
-        print("[swap_logic] 讀取今日 Lineup_Status（DB2）...")
-    today_statuses = get_today_lineup_status(notion_key, today_str)
-    if verbose:
-        print(f"  → {len(today_statuses)} 筆")
-
-    if verbose:
-        print("[swap_logic] 讀取 7d 評分（DB3）...")
+        print("[swap_logic] 讀取 7d 評分（DB1）...")
     scores = get_7d_scores(notion_key, set(batters.keys()), name_to_id)
     if verbose:
         print(f"  → {len(scores)} 筆\n")
 
-    swaps = compute_swap_plan(batters, today_statuses, scores)
+    swaps = compute_swap_plan(batters, scores)
 
     if verbose:
         if swaps:

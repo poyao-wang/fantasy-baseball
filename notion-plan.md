@@ -78,6 +78,7 @@ flowchart TD
 | RBI_7d / RBI_30d / RBI_season | Number | 打點 |
 | R_7d / R_30d / R_season | Number | 得分 |
 | SB_7d / SB_30d / SB_season | Number | 盜壘 |
+| HPI_7d / HPI_30d / HPI_season | Formula | Hitter Power Index = R + RBI + HR×2 + SB×2 + (AVG−0.250)×1000；打者綜合強度指標（投手行為空值回傳 0） |
 | **投手 Stats** | | |
 | W_7d / W_30d / W_season | Number | 勝投 |
 | SV_7d / SV_30d / SV_season | Number | 救援 |
@@ -166,7 +167,6 @@ flowchart TD
 | Parent page | `34048ad3-2a1c-80a0-bcaa-ca973c2d4100` |
 | Fantasy Roster | `1eb4bb64-da35-4e9d-b740-f36c8569d3a6` |
 | Fantasy Schedule | `4bf3af3c-7095-493a-8746-5ad0fc9f147f` |
-| Fantasy Stats | `d3de639b-94af-44e3-9795-9ac965bb5419` |
 | Fantasy Sync Log | `34148ad3-2a1c-8141-ace0-df0667ecc04d` |
 
 詳細設定見 `notion_config.py`。
@@ -197,7 +197,7 @@ auto_swap.py（update_lineup 之後手動或 cron）
   │     Phase 2 — Replace（替補）
   │       - 找出 Current_Slot 在先發格且今日 OFF/OUT 的球員
   │       - 從 BN（含 Phase 1 換下的 intruder）找最佳候補補上
-  │       - 依 DB3 7d 評分排名，Util 格接受任意打者
+  │       - 依 DB1 HPI_7d 評分排名，Util 格接受任意打者
   │       - in=None 代表無可用替補
   │     Phase 2.5 — Chain Swap（連鎖換人）
   │       - BN 找不到直接替補時，從其他先發格找有資格球員移過去
@@ -228,7 +228,24 @@ auto_swap.py（update_lineup 之後手動或 cron）
 
 - DB1 用 `Player_ID` 做 upsert key
 - DB2 用 `Title`（姓名＋日期）做 upsert key
-- DB3 已整合進 DB1，stats 直接 PATCH DB1 對應球員的 page
+- DB3 已整合進 DB1，stats 直接 PATCH DB1 對應球員的 page（Fantasy Stats DB ID 已廢棄）
 - Trade Target 的賽程跟自己球員完全相同結構，`add_trade_target.py` 加人後自動補齊本週賽程
 - Yahoo token 存在 RPi 本機 `oauth2.json`，`yahoo_oauth` 自動 refresh
 - Notion API key 存在 RPi 環境變數或 `.env`
+
+---
+
+## 📝 變更紀錄
+
+### 2026-04-19 06:55 JST（Notion AI）
+
+**DB1 補齊 HPI 欄位**
+
+- 新增 `HPI_7d` / `HPI_30d` / `HPI_season`（Formula）至 DB1 打者 Stats 區塊
+- 公式：R + RBI + HR×2 + SB×2 + (AVG−0.250)×1000；投手行為空值回傳 0
+- HPI 為 Notion 端計算，`update_stats.py` 無需 PATCH 此欄
+
+**修正過時參照**
+
+- `auto_swap.py` 說明：「依 DB3 7d 評分排名」→「依 DB1 HPI_7d 評分排名」
+- Notion 設定表格：移除已廢棄的 Fantasy Stats DB ID（`d3de639b-…`）
