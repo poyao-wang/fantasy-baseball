@@ -26,7 +26,7 @@ fantasy-baseball/
 │   ├── notion_config.py        Notion DB IDs 設定
 │   ├── update_roster.py        陣容 upsert → Fantasy Roster（每週一）+ 自動清除離隊球員
 │   ├── update_schedule.py      當週賽程 upsert → Fantasy Schedule（每球員×7天，每週一）
-│   ├── update_lineup.py        Current_Slot 同步 → Fantasy Roster + 今日打線狀態 → Fantasy Schedule（每小時）
+│   ├── update_lineup.py        Current_Slot + Today_Status 同步 → Fantasy Roster（每小時，DB2 不動）
 │   ├── update_stats.py         區間統計（7d/30d/season）patch → Fantasy Roster（每週一）
 │   ├── add_trade_target.py     交易目標一鍵加入（Fantasy Roster + Schedule）
 │   ├── yahoo_playwright.py     Yahoo 登入模組，session 存 yahoo_session.json
@@ -93,7 +93,7 @@ python3.12 sync/update_roster.py
 # 當週賽程 upsert → Notion DB2 Schedule（每週一 / 手動）
 python3.12 sync/update_schedule.py
 
-# DB1 Current_Slot 同步 + DB2 今日打線狀態更新（每小時 / 手動）
+# DB1 Current_Slot + Today_Status 更新（每小時 / 手動）
 python3.12 sync/update_lineup.py
 
 # 區間統計（7d/30d/season）patch → Notion DB1 Fantasy Roster（每週一 / 手動）
@@ -107,7 +107,9 @@ python3.12 sync/add_trade_target.py --id 8967
 python3.12 sync/sync_log.py
 ```
 
-## Lineup_Status 說明
+## Today_Status 說明（DB1）
+
+每小時由 `update_lineup.py` 更新到 DB1 的 `Today_Status` 欄，`swap_logic.py` 讀此欄決定換人。DB2 的 `Lineup_Status` 欄為靜態，僅供 Notion 查閱用。
 
 | 狀態 | 對象 | 意義 |
 |------|------|------|

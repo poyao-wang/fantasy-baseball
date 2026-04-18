@@ -72,6 +72,7 @@ flowchart TD
 | Notes | Text | 交易筆記、分析備忘 |
 | Player_ID | Number | Yahoo player_id（upsert key） |
 | Stats_Updated_At | Date | stats 最後更新時間 |
+| Today_Status | Select | 今日打線狀態：IN / OUT / TBD / OFF / START；由 update_lineup.py 每小時更新，swap_logic 讀此欄做換人判斷 |
 | **打者 Stats** | | |
 | AVG_7d / AVG_30d / AVG_season | Number | 打擊率（三區間） |
 | HR_7d / HR_30d / HR_season | Number | 全壘打 |
@@ -119,7 +120,7 @@ flowchart TD
 | `update_roster.py` | 每週一 / 手動 | 從 Yahoo API 拉自己陣容，upsert DB1；upsert 後自動比對 Notion My Roster，archive 已離隊球員 |
 | `update_schedule.py` | 每週一 | 建立 DB1 所有球員的當週 DB2 rows |
 | `update_stats.py` | 每週一 | 從 Yahoo API 拉數據，patch DB1 stats 欄位（_7d/_30d/_season） |
-| `update_lineup.py` | 每小時 22–08 JST | Yahoo API 同步 DB1 Current_Slot + MLB API 更新 DB2 今日 Lineup_Status |
+| `update_lineup.py` | 每小時 22–08 JST | Yahoo API 同步 DB1 Current_Slot + MLB API 更新 DB1 Today_Status（DB2 不動）|
 | `add_trade_target.py` | 手動 | 輸入球員姓名 → 查 Yahoo API → upsert DB1 + 建立 DB2 本週賽程 |
 | `yahoo_playwright.py` | 手動（首次 / session 過期） | Yahoo 瀏覽器登入，session 存 yahoo_session.json |
 | `setup_default_slot.py` | 手動（一次性） | DB1 Default_Slot 從 Current_Slot 初始化 |
@@ -236,6 +237,17 @@ auto_swap.py（update_lineup 之後手動或 cron）
 ---
 
 ## 📝 變更紀錄
+
+### 2026-04-19 07:35 JST
+
+**DB2 瘦身：Today_Status 搬進 DB1**
+
+- DB1 新增 `Today_Status`（Select）欄，每小時由 `update_lineup.py` 更新（IN/OUT/TBD/OFF/START）
+- `update_lineup.py`：`get_db1_my_roster()` 一次查詢取代原本三個函數；MLB teams API 建 id→abbrev 對照表；DB2 完全不寫入
+- `swap_logic.py`：`get_all_batters()` 帶回 today_status；移除 `get_today_lineup_status()`（DB2 query）
+- DB2 現為純靜態，週一建完整週後不再更新；hourly update 只動 DB1（~30 rows）
+
+---
 
 ### 2026-04-19 06:55 JST（Notion AI）
 

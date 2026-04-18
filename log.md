@@ -81,3 +81,8 @@
 2026-04-18 [Verify] Pi5 三條 cron 手動驗證：roster/schedule/stats/sync_log 全數通過；lineup 通過；auto_swap Playwright timeout（Yahoo 網路短暫問題，與 DB3 改動無關）
 2026-04-18 [Fix] yahoo_playwright.py _is_session_valid timeout 修正：ET 早上 8–9 點 Yahoo 網站慢導致 60s timeout 後直接 crash；改為 timeout 時 return True（樂觀假設 session 有效），讓後續真正操作去判斷失效
 2026-04-18 21:44 [Manual] Pi5 手動執行 update_lineup + auto_swap：3 換人成功（C：Jeffers→BN/Will Smith→C；OF：Donovan→BN/PCA→OF；3B：Riley→BN/Muncy→3B）；sync_log 補跑 7 筆同步 Notion DB4
+2026-04-19 [Schema] DB1 新增 Today_Status 欄位（Select: IN/OUT/TBD/OFF/START），取代 DB2 Lineup_Status 作為每小時動態打線狀態來源；Notion API PATCH 建立完成
+2026-04-19 [Refactor] update_lineup.py DB2 完全移除：get_db1_my_roster() 一次查詢取代原本三個函數（pitcher names + DB1 slots + DB2 rows）；PATCH Today_Status 到 DB1；MLB teams API 建 team_id→abbrev 對照表判斷 OFF
+2026-04-19 [Refactor] swap_logic.py 移除 DB2 依賴：get_all_batters() 直接帶回 today_status（從 DB1 Today_Status 讀取）；移除 get_today_lineup_status()、DB_SCHEDULE import、compute_swap_plan() 的 today_statuses 參數
+2026-04-19 [Fix] update_lineup.py MLB schedule API 不含 team abbreviation 欄位：改先拉 /teams?sportId=1 建 id→abbrev mapping，再對照 playing_team_ids 判斷今日出賽球隊
+2026-04-19 [Verify] Pi5 手動驗證：update_roster 27/27、update_lineup Today_Status 27 更新（Paul Skenes→START、Donovan→OUT 等正確）、auto_swap dry-run 換人計畫正常（Will Smith→BN/Jeffers→C + Jeffers→BN/Riley→Util）；hourly update 現在只動 DB1，DB2 整週靜態

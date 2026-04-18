@@ -87,18 +87,18 @@
 - [x] Step 4.11：yahoo_playwright.py session 驗證 timeout 修正
   - [x] _is_session_valid timeout 時 return True（樂觀假設），避免 ET 早上 8–9 點 Yahoo 慢時直接 crash
   - [x] Pi5 手動驗證：3 換人成功（C/OF/3B 換回）
-- [ ] Step 4.y：DB2 瘦身 — 把 Lineup_Status 搬進 DB1，DB2 改成純靜態查閱用
+- [x] Step 4.y：DB2 瘦身 — 把 Lineup_Status 搬進 DB1，DB2 改成純靜態查閱用
   - 目標：hourly update 只動 DB1（30 rows），DB2 週一建完整週不再寫入
-  - [ ] 盤點：目前用到 DB2 的腳本（4 支）
+  - [x] 盤點：目前用到 DB2 的腳本（4 支）
     - `update_lineup.py` — 讀 DB2 今日 rows → PATCH Lineup_Status（主要痛點）
     - `swap_logic.py` — 讀 DB2 今日 Lineup_Status 做換人判斷
     - `update_schedule.py` — 週一建立 DB2 當週 210 rows（靜態，保留不變）
     - `add_trade_target.py` — 新增球員時建 DB2 本週 7 rows（靜態，保留不變）
-  - [ ] DB1 新增 `Today_Status` 欄（Select: IN/OUT/TBD/OFF）
-  - [ ] `update_lineup.py` 改為 PATCH DB1.Today_Status，移除 DB2 寫入邏輯
-  - [ ] `swap_logic.py` 的 `get_today_lineup_status()` 改從 DB1 讀 Today_Status
-  - [ ] 測試：dry-run swap_logic 確認換人邏輯正確
-  - [ ] RPi 部署 + cron 驗證
+  - [x] DB1 新增 `Today_Status` 欄（Select: IN/OUT/TBD/OFF/START）
+  - [x] `update_lineup.py` 改為 PATCH DB1.Today_Status，移除 DB2 寫入邏輯
+  - [x] `swap_logic.py` 的 `get_today_lineup_status()` 改從 DB1 讀 Today_Status
+  - [x] 測試：dry-run swap_logic 確認換人邏輯正確
+  - [x] RPi 部署 + cron 驗證
 - [ ] Step 5：投手策略（依本週 H2H 領先程度決定是否保護 ERA/WHIP）
 - [ ] Step 4.x：swap_logic 評分公式改用 HPI（`R + RBI + HR×2 + SB×2 + (AVG−0.250)×1000`）或直接讀 DB1 `HPI_7d` 欄位，取代現有 `AVG×300 + HR×5 + RBI×2 + R + SB×3`（低打率現行公式不懲罰，可能換上拖累 AVG 的球員）
 
