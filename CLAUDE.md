@@ -34,9 +34,7 @@ output/     輸出 md 檔（自動產生，不進 git）
 
 ## Log 格式
 
-`log.md` 分兩 section（`---` 分隔）：
-- System Log：`YYYY-MM-DD HH:MM [類別] 動作`
-- Activity Log：`YYYY-MM-DD  {session 摘要}`
+`log.md` 是單一 chronological log，格式：`YYYY-MM-DD HH:MM [類別] 動作`
 
 說「log」時同步更新 `log.md`、`README.md`（結構異動時）、`todo.md`（完成打勾）、`notion-plan.md`（架構異動時）。
 

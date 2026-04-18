@@ -76,6 +76,17 @@
 - [x] Step 4.9：全腳本 Notion API 429 風險審查 + update_roster.py batch query 優化
   - [x] 診斷所有 sync 腳本 API 呼叫模式（update_lineup / stats / schedule 無問題）
   - [x] update_roster.py：刪除 find_page_by_player_id 逐筆 query，改用 fetch_all_my_roster_pages batch 共用（query 27→1）；Pi5 測試通過
+- [x] Step 4.10：DB3 架構簡化 + 整合進 DB1
+  - [x] DB3 Stats 改為每球員 1 筆，stats 展開成 _7d/_30d/_season property，移除 Week/Period
+  - [x] Notion DB3 schema 更新（API PATCH），舊 165 筆清除，重新寫入 27 筆
+  - [x] DB3 整合進 DB1：update_stats.py 直接 PATCH DB1 球員 page
+  - [x] swap_logic.py get_7d_scores 改從 DB1 讀 _7d 欄位（移除 DB_STATS）
+  - [x] add_trade_target.py upsert_stats_rows → patch_stats_to_db1（移除 DB_STATS）
+  - [x] notion_config.py 移除 DB_STATS，notion-plan.md 架構更新（4 DB → 3 DB）
+  - [x] Pi5 三條 cron 手動驗證全通過（roster/schedule/stats/lineup）
+- [x] Step 4.11：yahoo_playwright.py session 驗證 timeout 修正
+  - [x] _is_session_valid timeout 時 return True（樂觀假設），避免 ET 早上 8–9 點 Yahoo 慢時直接 crash
+  - [x] Pi5 手動驗證：3 換人成功（C/OF/3B 換回）
 - [ ] Step 5：投手策略（依本週 H2H 領先程度決定是否保護 ERA/WHIP）
 
 ### 其他功能

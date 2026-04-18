@@ -21,11 +21,14 @@ LOGIN_URL = "https://login.yahoo.com/"
 
 
 async def _is_session_valid(context: BrowserContext) -> bool:
-    """導向 Fantasy 首頁，看是否被踢回登入頁"""
+    """導向 Fantasy 首頁，看是否被踢回登入頁。timeout 視為網站暫時慢，樂觀假設 valid。"""
     page = await context.new_page()
     try:
-        await page.goto(FANTASY_URL, wait_until="domcontentloaded", timeout=20_000)
+        await page.goto(FANTASY_URL, wait_until="domcontentloaded", timeout=60_000)
         return "login.yahoo.com" not in page.url
+    except Exception:
+        print("[yahoo_playwright] session 驗證 timeout，假設 session 仍有效，繼續執行...")
+        return True
     finally:
         await page.close()
 

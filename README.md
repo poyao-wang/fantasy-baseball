@@ -27,8 +27,8 @@ fantasy-baseball/
 │   ├── update_roster.py        陣容 upsert → Fantasy Roster（每週一）+ 自動清除離隊球員
 │   ├── update_schedule.py      當週賽程 upsert → Fantasy Schedule（每球員×7天，每週一）
 │   ├── update_lineup.py        Current_Slot 同步 → Fantasy Roster + 今日打線狀態 → Fantasy Schedule（每小時）
-│   ├── update_stats.py         區間統計快照 upsert → Fantasy Stats（7d/30d/season，每週一）
-│   ├── add_trade_target.py     交易目標一鍵加入（Fantasy Roster + Schedule + Stats）
+│   ├── update_stats.py         區間統計（7d/30d/season）patch → Fantasy Roster（每週一）
+│   ├── add_trade_target.py     交易目標一鍵加入（Fantasy Roster + Schedule）
 │   ├── yahoo_playwright.py     Yahoo 登入模組，session 存 yahoo_session.json
 │   ├── setup_default_slot.py   Fantasy Roster Default_Slot 初始化（一次性）
 │   ├── swap_logic.py           OFF/OUT 偵測 → BN 候補依 7d 評分排名 → swap 清單
@@ -96,10 +96,10 @@ python3.12 sync/update_schedule.py
 # DB1 Current_Slot 同步 + DB2 今日打線狀態更新（每小時 / 手動）
 python3.12 sync/update_lineup.py
 
-# 區間統計快照 upsert → Notion DB3 Stats（每週一 / 手動）
+# 區間統計（7d/30d/season）patch → Notion DB1 Fantasy Roster（每週一 / 手動）
 python3.12 sync/update_stats.py
 
-# 新增交易目標（Fantasy Roster + Schedule + Stats）
+# 新增交易目標（Fantasy Roster + Schedule）
 python3.12 sync/add_trade_target.py "Jose Altuve"
 python3.12 sync/add_trade_target.py --id 8967
 
@@ -121,7 +121,7 @@ python3.12 sync/sync_log.py
 
 說「log」時，Claude 會同步確認並更新以下相關文件：
 
-- `log.md`（System Log + Activity Log）
+- `log.md`（chronological log）
 - `README.md`（結構或指令有異動時）
 - `todo.md`（完成打勾、新增待辦）
 - `notion-plan.md`（架構設計有異動時）
@@ -191,6 +191,8 @@ python3.12 sync/yahoo_playwright.py
 # RPi 部署：在 Mac 登入後 scp session 過去
 scp yahoo_session.json pi@pi5-1.local:~/fantasy-baseball/
 ```
+
+> **注意**：ET 早上 8–9 點 Yahoo 網站偶爾很慢，session 驗證可能 timeout。`yahoo_playwright.py` 遇到 timeout 會樂觀假設 session 仍有效繼續執行，若實際 session 失效才會在 form submit 時報錯。
 
 ## 注意事項
 
