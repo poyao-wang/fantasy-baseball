@@ -7,7 +7,7 @@ add_trade_target.py — 快速新增交易目標到 Notion
 動作（三步驟）：
   1. Yahoo API 查球員資訊 → upsert DB1 Players（Player_Type = Trade Target）
   2. 建立本週 DB2 Schedule rows（7天）
-  3. upsert DB3 Stats（7d / 30d / season）
+  3. patch DB1 Stats（AVG_7d/HR_7d… 三區間直接寫回 DB1）
 """
 import sys
 import argparse
@@ -19,7 +19,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).parent))
-from notion_config import NOTION_KEY_PATH, DB_PLAYERS, DB_SCHEDULE, DB_STATS
+from notion_config import NOTION_KEY_PATH, DB_PLAYERS, DB_SCHEDULE
 
 LEAGUE_ID = "469.l.171948"
 GAME_ID   = "469"
@@ -87,28 +87,6 @@ def find_schedule_rows_for_player(key: str, player_name: str, week_start: date, 
     return existing
 
 
-def find_stats_rows_for_player(key: str, player_name: str, week: int) -> dict[str, str]:
-    """DB3 裡找這位球員本週的 rows，回傳 {title: page_id}"""
-    url = f"https://api.notion.com/v1/databases/{DB_STATS}/query"
-    body: dict = {
-        "page_size": 100,
-        "filter": {"property": "Week", "number": {"equals": week}},
-    }
-    existing: dict[str, str] = {}
-    while True:
-        r = requests.post(url, headers=notion_headers(key), json=body)
-        r.raise_for_status()
-        data = r.json()
-        for page in data["results"]:
-            title_list = page["properties"]["Title"]["title"]
-            title = title_list[0]["plain_text"] if title_list else ""
-            if title.startswith(player_name):
-                existing[title] = page["id"]
-        if data.get("has_more"):
-            body["start_cursor"] = data["next_cursor"]
-        else:
-            break
-    return existing
 
 
 # ── Yahoo 查球員 ──────────────────────────────────────────────
@@ -367,51 +345,26 @@ def parse_stat(raw) -> float | None:
         return None
 
 
-def upsert_stats_rows(
+def patch_stats_to_db1(
     key: str,
     league,
     player: dict,
-    week: int,
 ) -> tuple[int, int]:
-    """upsert 3 個 period 到 DB3 Stats。回傳 (ok, fail)"""
+    """三個 period stats 全部寫回 DB1 player page。回傳 (ok, fail)"""
     target_stats = BATTER_STATS if player["position_type"] == "B" else PITCHER_STATS
-    existing = find_stats_rows_for_player(key, player["name"], week)
     yahoo_id = str(player["player_id"])
-    ok, fail = 0, 0
     now_iso  = datetime.now(ZoneInfo("Asia/Tokyo")).isoformat()
+    props: dict = {"Stats_Updated_At": {"date": {"start": now_iso}}}
+    ok, fail = 0, 0
 
     for period_label, req_type in PERIODS:
         try:
             raw_list = league.player_stats([yahoo_id], req_type)
             player_data = next((x for x in raw_list if "player_id" in x), {})
             stats = {stat: parse_stat(player_data.get(stat)) for stat in target_stats}
-
-            title = f"{player['name']} W{week} {period_label}"
-            props: dict = {
-                "Title":      {"title": [{"text": {"content": title}}]},
-                "Player":     {"relation": [{"id": player["page_id"]}]},
-                "Week":       {"number": week},
-                "Period":     {"select": {"name": period_label}},
-                "Updated_At": {"date": {"start": now_iso}},
-            }
             for stat, val in stats.items():
                 if val is not None:
-                    props[stat] = {"number": val}
-
-            page_id = existing.get(title)
-            if page_id:
-                url = f"https://api.notion.com/v1/pages/{page_id}"
-                r = requests.patch(url, headers=notion_headers(key), json={"properties": props})
-                action = "更新"
-            else:
-                url = "https://api.notion.com/v1/pages"
-                r = requests.post(url, headers=notion_headers(key), json={
-                    "parent": {"database_id": DB_STATS}, "properties": props
-                })
-                action = "新增"
-            r.raise_for_status()
-
-            # 印摘要
+                    props[f"{stat}_{period_label}"] = {"number": val}
             if player["position_type"] == "B":
                 summary = (
                     f"AVG={stats.get('AVG') or '-'}  "
@@ -428,11 +381,19 @@ def upsert_stats_rows(
                     f"SV={stats.get('SV') or '-'}  "
                     f"K={stats.get('K') or '-'}"
                 )
-            print(f"    [{action}] {period_label:<6}  {summary}")
+            print(f"    {period_label:<6}  {summary}")
             ok += 1
         except Exception as e:
             print(f"    [錯誤] {period_label}: {e}")
             fail += 1
+
+    try:
+        url = f"https://api.notion.com/v1/pages/{player['page_id']}"
+        r = requests.patch(url, headers=notion_headers(key), json={"properties": props})
+        r.raise_for_status()
+    except Exception as e:
+        print(f"    [錯誤] PATCH DB1: {e}")
+        return 0, len(PERIODS)
 
     return ok, fail
 
@@ -498,15 +459,15 @@ def main():
     )
     print(f"  → {s_ok} 成功 / {s_fail} 失敗\n")
 
-    # ── Step 4：DB3 stats ────────────────────────────────────
-    print(f"[Notion] DB3 Stats — upsert 區間快照（7d / 30d / season）...")
+    # ── Step 4：DB1 stats patch ───────────────────────────────
+    print(f"[Notion] DB1 Stats — patch 區間數據（7d / 30d / season）...")
     player_for_stats = {
         "name":          player_name,
         "page_id":       player_page_id,
         "player_id":     player_id,
         "position_type": position_type,
     }
-    st_ok, st_fail = upsert_stats_rows(notion_key, league, player_for_stats, week)
+    st_ok, st_fail = patch_stats_to_db1(notion_key, league, player_for_stats)
     print(f"  → {st_ok} 成功 / {st_fail} 失敗\n")
 
     total_ok   = 1 + s_ok + st_ok

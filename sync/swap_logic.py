@@ -37,7 +37,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).parent))
-from notion_config import NOTION_KEY_PATH, DB_PLAYERS, DB_SCHEDULE, DB_STATS
+from notion_config import NOTION_KEY_PATH, DB_PLAYERS, DB_SCHEDULE
 
 # 計分的先發格（不含 BN / IL / SP / RP / P）
 STARTING_SLOTS = {"C", "1B", "2B", "3B", "SS", "OF", "Util"}
@@ -139,29 +139,25 @@ def get_today_lineup_status(key: str, today_str: str) -> dict[str, str]:
 
 def get_7d_scores(key: str, player_ids: set[int], name_to_id: dict[str, int]) -> dict[int, float]:
     """
-    DB3: Period = 7d，計算每位打者的綜合評分（打者用）
+    DB1: 讀 AVG_7d/HR_7d/RBI_7d/R_7d/SB_7d，計算每位打者的綜合評分
     score = AVG*300 + HR*5 + RBI*2 + R*1 + SB*3
     回傳 {player_id: score}
     """
-    pages = _query_all(key, DB_STATS, {
-        "page_size": 100,
-        "filter": {"property": "Period", "select": {"equals": "7d"}},
-    })
+    pages = _query_all(key, DB_PLAYERS, {"page_size": 100})
     scores: dict[int, float] = {}
     for page in pages:
         props = page["properties"]
-        title_list = props["Title"]["title"]
-        title = title_list[0]["plain_text"] if title_list else ""
-        # Title 格式：「Name W{n} 7d」
-        name = re.sub(r"\s+W\d+\s+7d$", "", title).strip()
-        pid = name_to_id.get(name)
-        if pid is None or pid not in player_ids:
+        pid_raw = props.get("Player_ID", {}).get("number")
+        if pid_raw is None:
             continue
-        avg = (props.get("AVG", {}).get("number") or 0)
-        hr  = (props.get("HR",  {}).get("number") or 0)
-        rbi = (props.get("RBI", {}).get("number") or 0)
-        r   = (props.get("R",   {}).get("number") or 0)
-        sb  = (props.get("SB",  {}).get("number") or 0)
+        pid = int(pid_raw)
+        if pid not in player_ids:
+            continue
+        avg = (props.get("AVG_7d", {}).get("number") or 0)
+        hr  = (props.get("HR_7d",  {}).get("number") or 0)
+        rbi = (props.get("RBI_7d", {}).get("number") or 0)
+        r   = (props.get("R_7d",   {}).get("number") or 0)
+        sb  = (props.get("SB_7d",  {}).get("number") or 0)
         scores[pid] = avg * 300 + hr * 5 + rbi * 2 + r + sb * 3
     return scores
 
