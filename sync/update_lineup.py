@@ -117,6 +117,11 @@ def get_today_game_data(today_str: str) -> tuple[set[str], set[str], set[str], s
     - in_published_game_players: set[str] — 已公布打線球隊的全體 roster 球員姓名
     - playing_team_abbrevs: set[str]      — 今日有賽球隊縮寫（如 TOR, LAD）
     """
+    # 先建 team_id → abbreviation 對照表（schedule API 不含 abbreviation）
+    tr = requests.get("https://statsapi.mlb.com/api/v1/teams?sportId=1", timeout=10)
+    tr.raise_for_status()
+    team_abbrev: dict[int, str] = {t["id"]: t["abbreviation"] for t in tr.json().get("teams", [])}
+
     url = (
         f"https://statsapi.mlb.com/api/v1/schedule"
         f"?sportId=1&date={today_str}&hydrate=probablePitcher,lineups"
@@ -133,7 +138,8 @@ def get_today_game_data(today_str: str) -> tuple[set[str], set[str], set[str], s
         for game in d.get("games", []):
             for side in ("home", "away"):
                 team = game["teams"][side]
-                abbrev = team["team"].get("abbreviation", "")
+                team_id = team["team"]["id"]
+                abbrev = team_abbrev.get(team_id, "")
                 if abbrev:
                     playing_team_abbrevs.add(abbrev)
                 pitcher = team.get("probablePitcher", {})
