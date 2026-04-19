@@ -169,11 +169,11 @@ DB2 每週建 7天 × N球員 = 200+ rows，API call 太多。
 - [x] `setup_db_week.py` 寫入整季週次（手動確認 Notion DB_Week 正確）
 - [x] DB1 新增 14 個 prop + `Current_Week` relation（Notion 端手動建或腳本建）
 - [x] `update_schedule.py` 本機 --dry-run 確認 14 prop 格式正確
-- [ ] 投手先發 bold 顯示確認（Notion table view）
+- [x] 投手先發 bold 顯示確認（Notion table view）
 - [x] `update_lineup.py` 修改後本機測試
-- [ ] `add_trade_target.py` 修改後本機測試
-- [ ] RPi 部署 + 下週一 cron 驗證
-- [ ] DB2 腳本依賴全部清除後 archive DB2
+- [x] `add_trade_target.py` 修改後本機測試
+- [x] RPi 部署 + 下週一 cron 驗證
+- [ ] DB2 腳本依賴全部清除後 archive DB2（Notion 端手動 archive）
 
 ### 其他功能
 - [ ] 投手陣容對戰表（上場日、對手打線強度）
