@@ -99,8 +99,81 @@
   - [x] `swap_logic.py` 的 `get_today_lineup_status()` 改從 DB1 讀 Today_Status
   - [x] 測試：dry-run swap_logic 確認換人邏輯正確
   - [x] RPi 部署 + cron 驗證
+- [x] Step 4.z：DB2 退役 + DB_Week 新架構（見下方詳細說明）
 - [ ] Step 5：投手策略（依本週 H2H 領先程度決定是否保護 ERA/WHIP）
 - [ ] Step 4.x：swap_logic 評分公式改用 HPI（`R + RBI + HR×2 + SB×2 + (AVG−0.250)×1000`）或直接讀 DB1 `HPI_7d` 欄位，取代現有 `AVG×300 + HR×5 + RBI×2 + R + SB×3`（低打率現行公式不懲罰，可能換上拖累 AVG 的球員）
+
+---
+
+## Step 4.z：DB2 退役 + DB_Week 新架構
+
+### 背景
+DB2 每週建 7天 × N球員 = 200+ rows，API call 太多。
+改成 DB1 直接帶 14 個 schedule prop，DB2 退役。
+
+### 新架構說明
+
+**DB_Week（新 Notion DB，一次性建立）**
+- `Week_Number`（Title）：`W01`、`W02`…
+- `Week_Start`（Date）：該週週一日期（ET 基準）
+- 開季前一次性把 2026 整季 ~26 週全部寫入，之後不動
+- DB ID 建好後存入 `notion_config.py`（新增 `DB_WEEK`）
+
+**DB1 新增欄位**
+- `Current_Week`（Relation → DB_Week）：該球員目前所在週
+- 14 個 Text prop：`This_Mon` ～ `This_Sun`、`Next_Mon` ～ `Next_Sun`
+- 格式：
+  - 野手有賽：`vs NYY / Gausman`（對手 / opposing SP）
+  - 野手 OFF：留空
+  - 投手有賽（輪值未定）：`vs NYY`
+  - 投手確認先發：**`vs NYY`**（Notion rich_text bold annotation）
+  - 投手 OFF：留空
+
+### 腳本變更
+
+**`setup_db_week.py`（新，一次性）**
+- 建立 DB_Week 並寫入 2026 整季週次
+- 從 MLB schedule API 或手動算出每週週一日期（ET）
+
+**`update_schedule.py`（重寫）**
+- 舊邏輯（建 DB2 rows）完全移除
+- 新邏輯：
+  1. 查 MLB schedule API 抓本週 + 下週每日賽程（對手 + 先發投手）
+  2. PATCH DB1 所有球員的 `Current_Week` relation
+  3. PATCH DB1 所有球員的 14 個 schedule prop
+  4. 投手有先發預訂時用 bold rich_text 標記
+- 觸發：每週一（cron，現有排程）
+
+**`update_lineup.py`（修改）**
+- 保留現有 `Today_Status` 更新邏輯（不動）
+- 新增：同步更新 14 個 schedule prop（重抓 MLB schedule，有變動才 PATCH）
+  - 目的：opposing SP 可能開賽前才確認，hourly 確保即時
+  - API 次數：MLB schedule API（免費無嚴格限制）+ Notion PATCH 30 calls
+- 觸發：每小時 22:00–08:00 JST（現有排程）
+
+**`add_trade_target.py`（修改）**
+- 移除建 DB2 rows 的邏輯
+- 改成 PATCH DB1 該球員的 14 個 schedule prop（重用 update_schedule 的邏輯）
+
+**`notion_config.py`（修改）**
+- 新增 `DB_WEEK` ID
+- 保留 `DB2` ID 直到退役確認（可加 deprecated 註記）
+
+### DB2 退役步驟
+1. 確認所有腳本都不再讀寫 DB2
+2. `notion_config.py` 移除或標記 `DB2` 為 deprecated
+3. Notion 端 DB2 可 archive（不刪，保留歷史）
+4. 更新 `notion-plan.md` 架構圖
+
+### 驗證清單
+- [x] `setup_db_week.py` 寫入整季週次（手動確認 Notion DB_Week 正確）
+- [x] DB1 新增 14 個 prop + `Current_Week` relation（Notion 端手動建或腳本建）
+- [x] `update_schedule.py` 本機 --dry-run 確認 14 prop 格式正確
+- [ ] 投手先發 bold 顯示確認（Notion table view）
+- [x] `update_lineup.py` 修改後本機測試
+- [ ] `add_trade_target.py` 修改後本機測試
+- [ ] RPi 部署 + 下週一 cron 驗證
+- [ ] DB2 腳本依賴全部清除後 archive DB2
 
 ### 其他功能
 - [ ] 投手陣容對戰表（上場日、對手打線強度）

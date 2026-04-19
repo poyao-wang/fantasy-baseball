@@ -25,10 +25,11 @@ fantasy-baseball/
 ├── sync/                 # Notion 同步腳本（RPi cron 用）
 │   ├── notion_config.py        Notion DB IDs 設定
 │   ├── update_roster.py        陣容 upsert → Fantasy Roster（每週一）+ 自動清除離隊球員
-│   ├── update_schedule.py      當週賽程 upsert → Fantasy Schedule（每球員×7天，每週一）
-│   ├── update_lineup.py        Current_Slot + Today_Status 同步 → Fantasy Roster（每小時，DB2 不動）
+│   ├── update_schedule.py      兩週賽程 PATCH → DB1 schedule props This_Mon～Next_Sun（每週一）
+│   ├── update_lineup.py        Current_Slot + Today_Status + schedule props 同步 → DB1（每小時）
 │   ├── update_stats.py         區間統計（7d/30d/season）patch → Fantasy Roster（每週一）
-│   ├── add_trade_target.py     交易目標一鍵加入（Fantasy Roster + Schedule）
+│   ├── add_trade_target.py     交易目標一鍵加入（DB1 Players + schedule props + stats）
+│   ├── setup_db_week.py        DB_Week 建立 + 整季週次寫入 + DB1 新增 schedule props（一次性）
 │   ├── yahoo_playwright.py     Yahoo 登入模組，session 存 yahoo_session.json
 │   ├── setup_default_slot.py   Fantasy Roster Default_Slot 初始化（一次性）
 │   ├── swap_logic.py           OFF/OUT 偵測 → BN 候補依 7d 評分排名 → swap 清單
@@ -90,8 +91,9 @@ python3.12 scripts/fetch_league_info.py
 # 陣容 upsert → Notion DB1 Players（每週一 / 手動）
 python3.12 sync/update_roster.py
 
-# 當週賽程 upsert → Notion DB2 Schedule（每週一 / 手動）
+# 兩週賽程 PATCH → Notion DB1 schedule props（每週一 / 手動）
 python3.12 sync/update_schedule.py
+python3.12 sync/update_schedule.py --dry-run  # 試算，不寫入 Notion
 
 # DB1 Current_Slot + Today_Status 更新（每小時 / 手動）
 python3.12 sync/update_lineup.py
@@ -99,7 +101,7 @@ python3.12 sync/update_lineup.py
 # 區間統計（7d/30d/season）patch → Notion DB1 Fantasy Roster（每週一 / 手動）
 python3.12 sync/update_stats.py
 
-# 新增交易目標（Fantasy Roster + Schedule）
+# 新增交易目標（DB1 Players + schedule props + stats）
 python3.12 sync/add_trade_target.py "Jose Altuve"
 python3.12 sync/add_trade_target.py --id 8967
 
@@ -109,7 +111,7 @@ python3.12 sync/sync_log.py
 
 ## Today_Status 說明（DB1）
 
-每小時由 `update_lineup.py` 更新到 DB1 的 `Today_Status` 欄，`swap_logic.py` 讀此欄決定換人。DB2 的 `Lineup_Status` 欄為靜態，僅供 Notion 查閱用。
+每小時由 `update_lineup.py` 更新到 DB1 的 `Today_Status` 欄，`swap_logic.py` 讀此欄決定換人。同一次執行也會更新 `This_Mon～Next_Sun` 14 個 schedule props（opposing SP 開賽前即時確認）。
 
 | 狀態 | 對象 | 意義 |
 |------|------|------|

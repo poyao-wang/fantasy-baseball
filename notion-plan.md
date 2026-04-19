@@ -16,37 +16,36 @@ flowchart TD
     end
 
     subgraph Notion["Notion DB"]
-        DB1[("Fantasy Roster<br/>所有球員 + 區間 Stats<br/>My Roster + Trade Target")]
-        DB2[("Fantasy Schedule<br/>每日賽況")]
+        DB1[("Fantasy Roster<br/>所有球員 + Stats + Schedule Props<br/>My Roster + Trade Target")]
+        DBW[("DB_Week<br/>整季週次（~26 rows，靜態）")]
         DB4[("Fantasy Sync Log<br/>腳本執行紀錄")]
     end
 
     subgraph Views["Notion View（查閱用）"]
         V1["先發陣容 + 守備彈性"]
-        V2["今日賽況（打線狀態）"]
-        V3["本週對戰一覽"]
+        V2["今日賽況（Today_Status）"]
+        V3["本週對戰一覽（This_Mon～Sun）"]
         V4["交易分析板"]
         V5["同位置比較"]
     end
 
     Y -->|roster / eligible_positions| S1
     Y -->|season stats| S1
-    M -->|schedule / starter| S1
-    M -->|lineups| S2
+    M -->|schedule / starter 兩週| S1
+    M -->|lineups + schedule| S2
     Y -->|target player info| S3
-    S1 -->|upsert 球員資訊 + stats| DB1
-    S1 -->|建立當週 rows| DB2
+    S1 -->|upsert 球員資訊 + stats + schedule props| DB1
+    S1 -->|Current_Week relation| DBW
     S1 -->|sync_log| DB4
-    S2 -->|更新 Lineup_Status + auto_swap| DB2
+    S2 -->|Today_Status + schedule props + auto_swap| DB1
     S2 -->|sync_log| DB4
-    S3 -->|upsert| DB1
-    S3 -->|建立賽程 rows| DB2
+    S3 -->|upsert + schedule props| DB1
     DB1 --> V1
-    DB2 --> V2
-    DB2 --> V3
+    DB1 --> V2
+    DB1 --> V3
     DB1 --> V4
     DB1 --> V5
-    DB1 -.->|Relation| DB2
+    DB1 -.->|Current_Week Relation| DBW
 ```
 
 ---
@@ -86,30 +85,30 @@ flowchart TD
 | K_7d / K_30d / K_season | Number | 三振 |
 | ERA_7d / ERA_30d / ERA_season | Number | 防禦率 |
 | WHIP_7d / WHIP_30d / WHIP_season | Number | WHIP |
+| **Schedule Props（Step 4.z 新增）** | | |
+| Current_Week | Relation → DB_Week | 目前所在週 |
+| This_Mon ～ This_Sun | Text（rich_text） | 本週每日賽況；野手：`vs NYY / Gausman`；投手確認先發：**`vs NYY`**（bold）；OFF 留空 |
+| Next_Mon ～ Next_Sun | Text（rich_text） | 下週每日賽況（同上格式） |
 
 ---
 
-### DB2：Fantasy Schedule（每日賽況）
+### DB_Week（整季週次，靜態）
 
-自己的球員 + Trade Target 都有賽程，方便比較誰這週出賽多
+一次性建立，整季不動。僅供 DB1 的 `Current_Week` Relation 使用。
 
-每週一建立當週 7 天資料列，打線狀態每小時更新一次
+`setup_db_week.py` 執行後自動建立（DB ID 寫入 notion_config.py）。
 
 | Property | 類型 | 說明 |
 |----------|------|------|
-| Title | Title | `姓名 YYYY-MM-DD`（upsert key） |
-| Player | Relation → DB1 | 關聯球員 |
-| batterOrPitcherRoll | Rollup → DB1 | 從 Player 關聯拉取 Position_Type（B/P），判斷打者或投手用 |
-| Date | Date | 比賽日期（ET 基準） |
-| Opponent | Text | 對手球隊（`vs NYY` / `@ BOS`） |
-| Opposing_SP | Text | 對手先發投手 |
-| Lineup_Status | Select | 打者：`IN` 在打線 / `OUT` 未上場 / `TBD` 未公布 / `OFF` 休息日；投手：`START` 今日先發 / `TBD` 有賽非先發 / `OFF` 休息日 |
-| Week | Number | Fantasy 週次 |
-| Game_Time | Text | 比賽時間（ET） |
-| defaultSlotRoll | Rollup → DB1 | 從 Player 關聯拉取 Default_Slot（預設守位） |
-| defaultSlotRollVal | Formula | 將 defaultSlotRoll 轉為純文字；空值回傳 "-"，方便篩選排序 |
-| currentSlotRoll | Rollup → DB1 | 從 Player 關聯拉取 Current_Slot（球員目前實際放的格子） |
-| eligiblePositionsRoll | Rollup → DB1 | 從 Player 關聯拉取 Eligible_Positions（可守位置，multi-select） |
+| Week_Number | Title | `W01`、`W02`…（upsert key） |
+| Week_Start | Date | 該週週一日期（ET 基準） |
+
+---
+
+### ~~DB2：Fantasy Schedule（已退役）~~
+
+原為每日賽況（每球員 × 7天 rows），週一建立 ~210 rows API 呼叫太多。
+已整合進 DB1 的 14 個 schedule props，DB2 Notion 端保留歷史但不再寫入。
 
 ---
 
@@ -118,10 +117,11 @@ flowchart TD
 | 腳本 | 觸發 | 說明 |
 |------|------|------|
 | `update_roster.py` | 每週一 / 手動 | 從 Yahoo API 拉自己陣容，upsert DB1；upsert 後自動比對 Notion My Roster，archive 已離隊球員 |
-| `update_schedule.py` | 每週一 | 建立 DB1 所有球員的當週 DB2 rows |
+| `update_schedule.py` | 每週一 | PATCH DB1 所有球員的 This_Mon～Next_Sun 14 個 schedule props + Current_Week relation；支援 --dry-run |
 | `update_stats.py` | 每週一 | 從 Yahoo API 拉數據，patch DB1 stats 欄位（_7d/_30d/_season） |
-| `update_lineup.py` | 每小時 22–08 JST | Yahoo API 同步 DB1 Current_Slot + MLB API 更新 DB1 Today_Status（DB2 不動）|
-| `add_trade_target.py` | 手動 | 輸入球員姓名 → 查 Yahoo API → upsert DB1 + 建立 DB2 本週賽程 |
+| `update_lineup.py` | 每小時 22–08 JST | Yahoo API 同步 DB1 Current_Slot + MLB API 更新 DB1 Today_Status + schedule props（opposing SP 即時） |
+| `add_trade_target.py` | 手動 | 輸入球員姓名 → 查 Yahoo API → upsert DB1 + PATCH DB1 兩週 schedule props + patch stats |
+| `setup_db_week.py` | 手動（一次性） | 建立 DB_Week Notion DB + 寫入整季 26 週次 + DB1 新增 14 個 schedule props + Current_Week relation |
 | `yahoo_playwright.py` | 手動（首次 / session 過期） | Yahoo 瀏覽器登入，session 存 yahoo_session.json |
 | `setup_default_slot.py` | 手動（一次性） | DB1 Default_Slot 從 Current_Slot 初始化 |
 | `swap_logic.py` | 被 auto_swap.py import | 四階段換人邏輯（Rebalance / Restore / Replace / Chain Swap） |
@@ -137,8 +137,8 @@ flowchart TD
 | 先發陣容 | DB1 | Table | Player_Type = My Roster，Current_Slot ≠ BN/IL |
 | 板凳＋彈性 | DB1 | Table | Player_Type = My Roster，Current_Slot = BN |
 | 傷兵追蹤 | DB1 | Table | Status ≠ Healthy |
-| 今日賽況 | DB2 | Table | Date = Today，sort by Lineup_Status |
-| 本週對戰 | DB2 | Calendar | 本週，by Date |
+| 今日賽況 | DB1 | Table | Player_Type = My Roster，顯示 Today_Status + This_Mon～Sun |
+| 本週對戰 | DB1 | Table | 顯示 This_Mon～This_Sun，sort by Current_Slot |
 | 交易分析板 | DB1 | Table | Player_Type = Trade Target，顯示 Eligible_Positions + Notes + Stats |
 | 同位置比較 | DB1 | Table | filter by Eligible_Positions，My Roster vs Trade Target 並列 |
 
@@ -167,7 +167,8 @@ flowchart TD
 | API Key | `~/.config/notion/api_key_new` |
 | Parent page | `34048ad3-2a1c-80a0-bcaa-ca973c2d4100` |
 | Fantasy Roster | `1eb4bb64-da35-4e9d-b740-f36c8569d3a6` |
-| Fantasy Schedule | `4bf3af3c-7095-493a-8746-5ad0fc9f147f` |
+| Fantasy Schedule（已退役） | `4bf3af3c-7095-493a-8746-5ad0fc9f147f` |
+| DB_Week | 執行 setup_db_week.py 後填入 |
 | Fantasy Sync Log | `34148ad3-2a1c-8141-ace0-df0667ecc04d` |
 
 詳細設定見 `notion_config.py`。
@@ -237,6 +238,24 @@ auto_swap.py（update_lineup 之後手動或 cron）
 ---
 
 ## 📝 變更紀錄
+
+### 2026-04-19 Step 4.z — DB2 退役 + DB_Week 新架構（腳本實作完成，待驗證）
+
+**動機**：DB2 每週建 7天 × N球員 ≈ 210 rows，API call 太多。改成 DB1 直接帶 14 個 schedule prop。
+
+**架構變更**：
+- DB2 Fantasy Schedule → 退役（Notion 保留歷史，不再寫入）
+- 新增 DB_Week（~26 rows，整季週次靜態表）
+- DB1 新增：`Current_Week`（Relation → DB_Week）+ `This_Mon～This_Sun` + `Next_Mon～Next_Sun`（14 個 rich_text）
+- 投手確認先發：prop 用 bold annotation（Notion 顯示粗體）
+
+**腳本變更**：
+- `setup_db_week.py`（新建，一次性執行）
+- `update_schedule.py`（完整重寫，移除 DB2 邏輯）
+- `update_lineup.py`（新增 schedule props hourly sync）
+- `add_trade_target.py`（移除 DB2 rows，改 PATCH DB1 schedule props）
+
+---
 
 ### 2026-04-19 07:35 JST
 

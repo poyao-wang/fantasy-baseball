@@ -6,7 +6,7 @@ add_trade_target.py — 快速新增交易目標到 Notion
 
 動作（三步驟）：
   1. Yahoo API 查球員資訊 → upsert DB1 Players（Player_Type = Trade Target）
-  2. 建立本週 DB2 Schedule rows（7天）
+  2. PATCH DB1 兩週 schedule props（This_Mon～Next_Sun）
   3. patch DB1 Stats（AVG_7d/HR_7d… 三區間直接寫回 DB1）
 """
 import sys
@@ -19,7 +19,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).parent))
-from notion_config import NOTION_KEY_PATH, DB_PLAYERS, DB_SCHEDULE
+from notion_config import NOTION_KEY_PATH, DB_PLAYERS
 
 LEAGUE_ID = "469.l.171948"
 GAME_ID   = "469"
@@ -58,33 +58,6 @@ def find_page_by_player_id(key: str, player_id: int) -> str | None:
     return results[0]["id"] if results else None
 
 
-def find_schedule_rows_for_player(key: str, player_name: str, week_start: date, week_end: date) -> dict[str, str]:
-    """DB2 裡找這位球員本週的 rows，回傳 {title: page_id}"""
-    url = f"https://api.notion.com/v1/databases/{DB_SCHEDULE}/query"
-    body: dict = {
-        "page_size": 100,
-        "filter": {
-            "and": [
-                {"property": "Date", "date": {"on_or_after":  week_start.isoformat()}},
-                {"property": "Date", "date": {"on_or_before": week_end.isoformat()}},
-            ]
-        },
-    }
-    existing: dict[str, str] = {}
-    while True:
-        r = requests.post(url, headers=notion_headers(key), json=body)
-        r.raise_for_status()
-        data = r.json()
-        for page in data["results"]:
-            title_list = page["properties"]["Title"]["title"]
-            title = title_list[0]["plain_text"] if title_list else ""
-            if title.startswith(player_name):
-                existing[title] = page["id"]
-        if data.get("has_more"):
-            body["start_cursor"] = data["next_cursor"]
-        else:
-            break
-    return existing
 
 
 
@@ -213,16 +186,20 @@ def upsert_db1(key: str, p: dict) -> tuple[str, str]:
     return ("更新" if page_id else "新增"), page_id
 
 
-# ── DB2 schedule ──────────────────────────────────────────────
+# ── DB1 schedule props ────────────────────────────────────────
 
-def get_mlb_team_ids() -> tuple[dict, dict]:
+_DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
+def _get_mlb_team_ids() -> tuple[dict, dict]:
     r = requests.get("https://statsapi.mlb.com/api/v1/teams?sportId=1")
+    r.raise_for_status()
     abbr_to_id = {t["abbreviation"]: t["id"] for t in r.json()["teams"]}
     id_to_abbr = {t["id"]: t["abbreviation"] for t in r.json()["teams"]}
     return abbr_to_id, id_to_abbr
 
 
-def get_team_schedule(team_id: int, start: date, end: date, id_to_abbr: dict) -> dict[str, dict]:
+def _get_team_schedule_range(team_id: int, start: date, end: date, id_to_abbr: dict) -> dict[str, dict]:
     url = (
         f"https://statsapi.mlb.com/api/v1/schedule"
         f"?sportId=1&teamId={team_id}"
@@ -230,108 +207,83 @@ def get_team_schedule(team_id: int, start: date, end: date, id_to_abbr: dict) ->
         f"&hydrate=probablePitcher,lineups"
     )
     r = requests.get(url)
+    r.raise_for_status()
     result: dict[str, dict] = {}
     for d in r.json().get("dates", []):
         for game in d.get("games", []):
             home = game["teams"]["home"]
             away = game["teams"]["away"]
             is_home = home["team"]["id"] == team_id
-            opp_id  = away["team"]["id"] if is_home else home["team"]["id"]
+            opp_id   = away["team"]["id"] if is_home else home["team"]["id"]
             opp_team = id_to_abbr.get(opp_id, "???")
             side = "vs" if is_home else "@"
-            opp_pitcher = (
-                away.get("probablePitcher", {}).get("fullName", "TBD")
-                if is_home
-                else home.get("probablePitcher", {}).get("fullName", "TBD")
-            )
-            lineups    = game.get("lineups", {})
-            lineup_key = "homePlayers" if is_home else "awayPlayers"
-            lineup_names = [p.get("fullName", "") for p in lineups.get(lineup_key, [])]
+            our_side = home if is_home else away
+            opp_side = away if is_home else home
             result[d["date"]] = {
-                "matchup": f"{side} {opp_team}",
-                "pitcher": opp_pitcher,
-                "lineup":  lineup_names,
+                "matchup":     f"{side} {opp_team}",
+                "opp_pitcher": opp_side.get("probablePitcher", {}).get("fullName", ""),
+                "our_pitcher": our_side.get("probablePitcher", {}).get("fullName", ""),
             }
     return result
 
 
-def determine_lineup_status(
-    player_name: str,
-    position_type: str,
-    day: date,
-    today: date,
-    game_info: dict | None,
-) -> str:
+def _build_day_value(player_name: str, position_type: str, game_info: dict | None) -> tuple[str, bool]:
     if game_info is None:
-        return "OFF"
+        return "", False
+    matchup = game_info["matchup"]
     if position_type == "P":
-        return "TBD"
-    if day > today:
-        return "TBD"
-    lineup = game_info.get("lineup", [])
-    if not lineup:
-        return "TBD"
-    return "IN" if player_name in lineup else "OUT"
+        our = game_info.get("our_pitcher", "")
+        return matchup, bool(our) and our == player_name
+    else:
+        opp = game_info.get("opp_pitcher", "")
+        return (f"{matchup} / {opp}" if opp else matchup), False
 
 
-def upsert_schedule_rows(
+def _make_rich_text(text: str, bold: bool = False) -> dict:
+    if not text:
+        return {"rich_text": []}
+    item: dict = {"text": {"content": text}}
+    if bold:
+        item["annotations"] = {"bold": True}
+    return {"rich_text": [item]}
+
+
+def patch_schedule_props_to_db1(
     key: str,
     player_name: str,
     player_page_id: str,
     position_type: str,
     mlb_team: str,
-    week: int,
-    week_start: date,
-    week_end: date,
-    today: date,
 ) -> tuple[int, int]:
-    """建立本週 7 天 DB2 rows。回傳 (ok, fail)"""
-    abbr_to_id, id_to_abbr = get_mlb_team_ids()
+    """兩週 schedule props PATCH 到 DB1。回傳 (ok, fail)"""
+    today_et = datetime.now(ZoneInfo("America/New_York")).date()
+    days_since_monday = today_et.weekday()
+    this_monday = today_et - timedelta(days=days_since_monday)
+    next_monday  = this_monday + timedelta(days=7)
+    next_sunday  = next_monday + timedelta(days=6)
+
+    abbr_to_id, id_to_abbr = _get_mlb_team_ids()
     team_id = abbr_to_id.get(mlb_team)
-    sched   = get_team_schedule(team_id, week_start, week_end, id_to_abbr) if team_id else {}
+    sched   = _get_team_schedule_range(team_id, this_monday, next_sunday, id_to_abbr) if team_id else {}
 
-    existing = find_schedule_rows_for_player(key, player_name, week_start, week_end)
-    days = [week_start + timedelta(days=i) for i in range(7)]
-    ok, fail = 0, 0
+    player = {"name": player_name, "position_type": position_type}
+    props: dict = {}
+    for prefix, week_start in [("This", this_monday), ("Next", next_monday)]:
+        for i, day_name in enumerate(_DAY_LABELS):
+            date_str = (week_start + timedelta(days=i)).isoformat()
+            text, bold = _build_day_value(player_name, position_type, sched.get(date_str))
+            props[f"{prefix}_{day_name}"] = _make_rich_text(text, bold)
+            if text:
+                print(f"    {prefix}_{day_name}: {text}{'  [bold]' if bold else ''}")
 
-    for day in days:
-        title     = f"{player_name} {day.isoformat()}"
-        game_info = sched.get(day.isoformat())
-        lineup_status = determine_lineup_status(player_name, position_type, day, today, game_info)
-        opponent  = game_info["matchup"] if game_info else ""
-        opp_sp    = game_info["pitcher"]  if game_info else ""
-
-        props = {
-            "Title":          {"title": [{"text": {"content": title}}]},
-            "Player":         {"relation": [{"id": player_page_id}]},
-            "Date":           {"date": {"start": day.isoformat()}},
-            "Opponent":       {"rich_text": [{"text": {"content": opponent}}]},
-            "Opposing_SP":    {"rich_text": [{"text": {"content": opp_sp}}]},
-            "Lineup_Status":  {"select": {"name": lineup_status}},
-            "Week":           {"number": week},
-        }
-
-        try:
-            page_id = existing.get(title)
-            if page_id:
-                url = f"https://api.notion.com/v1/pages/{page_id}"
-                r = requests.patch(url, headers=notion_headers(key), json={"properties": props})
-                action = "更新"
-            else:
-                url = "https://api.notion.com/v1/pages"
-                r = requests.post(url, headers=notion_headers(key), json={
-                    "parent": {"database_id": DB_SCHEDULE}, "properties": props
-                })
-                action = "新增"
-            r.raise_for_status()
-            matchup = game_info["matchup"] if game_info else "OFF"
-            print(f"    {day.isoformat()[5:]} {matchup:<12} [{lineup_status}] ({action})")
-            ok += 1
-        except Exception as e:
-            print(f"    {day.isoformat()[5:]} 錯誤: {e}")
-            fail += 1
-
-    return ok, fail
+    try:
+        url = f"https://api.notion.com/v1/pages/{player_page_id}"
+        r = requests.patch(url, headers=notion_headers(key), json={"properties": props})
+        r.raise_for_status()
+        return 1, 0
+    except Exception as e:
+        print(f"    [錯誤] PATCH DB1 schedule: {e}")
+        return 0, 1
 
 
 # ── DB3 stats ─────────────────────────────────────────────────
@@ -416,15 +368,9 @@ def main():
 
     gm     = yfa.Game(sc, "mlb")
     league = gm.to_league(LEAGUE_ID)
-    week   = league.current_week()
 
-    # 日期基準：美東時間（ET）
-    today_et  = datetime.now(ZoneInfo("America/New_York")).date()
-    season_start = date(2026, 3, 25)
-    week_start   = season_start + timedelta(weeks=week - 1)
-    week_end     = week_start + timedelta(days=6)
-
-    print(f"Fantasy Week {week}：{week_start} ～ {week_end}（ET）\n")
+    today_et = datetime.now(ZoneInfo("America/New_York")).date()
+    print(f"今日 ET：{today_et}\n")
 
     # ── Step 1：查球員資訊 ────────────────────────────────────
     if args.player_id:
@@ -451,11 +397,10 @@ def main():
     action, player_page_id = upsert_db1(notion_key, p)
     print(f"  [{action}] {player_name}  player_id={player_id}\n")
 
-    # ── Step 3：DB2 schedule ─────────────────────────────────
-    print(f"[Notion] DB2 Schedule — 建立本週 7 天 rows...")
-    s_ok, s_fail = upsert_schedule_rows(
-        notion_key, player_name, player_page_id,
-        position_type, mlb_team, week, week_start, week_end, today_et,
+    # ── Step 3：DB1 schedule props ───────────────────────────
+    print(f"[Notion] DB1 Schedule Props — PATCH 兩週賽程...")
+    s_ok, s_fail = patch_schedule_props_to_db1(
+        notion_key, player_name, player_page_id, position_type, mlb_team,
     )
     print(f"  → {s_ok} 成功 / {s_fail} 失敗\n")
 
