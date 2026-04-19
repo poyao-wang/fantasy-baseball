@@ -19,7 +19,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).parent))
-from notion_config import NOTION_KEY_PATH, DB_PLAYERS
+from notion_config import NOTION_KEY_PATH, DB_PLAYERS, DB_WEEK
 
 LEAGUE_ID = "469.l.171948"
 GAME_ID   = "469"
@@ -275,6 +275,20 @@ def patch_schedule_props_to_db1(
             props[f"{prefix}_{day_name}"] = _make_rich_text(text, bold)
             if text:
                 print(f"    {prefix}_{day_name}: {text}{'  [bold]' if bold else ''}")
+
+    # Current_Week relation
+    if DB_WEEK:
+        try:
+            res = requests.post(
+                f"https://api.notion.com/v1/databases/{DB_WEEK}/query",
+                headers=notion_headers(key),
+                json={"filter": {"property": "Week_Start", "date": {"equals": this_monday.isoformat()}}},
+            )
+            results = res.json().get("results", [])
+            if results:
+                props["Current_Week"] = {"relation": [{"id": results[0]["id"]}]}
+        except Exception:
+            pass
 
     try:
         url = f"https://api.notion.com/v1/pages/{player_page_id}"
