@@ -23,6 +23,8 @@ from notion_config import NOTION_KEY_PATH, DB_PLAYERS, DB_WEEK
 
 LEAGUE_ID = "469.l.171948"
 GAME_ID   = "469"
+LOG_FILE  = Path(__file__).parent.parent / "sync.log"
+JST       = ZoneInfo("Asia/Tokyo")
 
 PERIODS = [
     ("7d",     "lastweek"),
@@ -32,6 +34,12 @@ PERIODS = [
 
 BATTER_STATS  = {"R", "HR", "RBI", "SB", "AVG"}
 PITCHER_STATS = {"W", "SV", "K", "ERA", "WHIP"}
+
+
+def write_sync_log(msg: str) -> None:
+    ts = datetime.now(JST).strftime("%Y-%m-%d %H:%M")
+    with LOG_FILE.open("a") as f:
+        f.write(f"{ts} JST [add_trade_target] {msg}\n")
 
 
 # ── Notion helpers ────────────────────────────────────────────
@@ -432,6 +440,11 @@ def main():
     total_ok   = 1 + s_ok + st_ok
     total_fail = s_fail + st_fail
     print(f"完成：{total_ok} 筆成功 / {total_fail} 筆失敗  →  {player_name} 已加入 Notion 交易目標")
+    pos_str = "/".join(eligible) if eligible else position_type
+    write_sync_log(
+        f"{player_name} ({mlb_team}, {pos_str}) — {action} DB1 / "
+        f"schedule {s_ok}/{s_fail} / stats {st_ok}/{st_fail}"
+    )
 
 
 if __name__ == "__main__":

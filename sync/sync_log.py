@@ -24,7 +24,7 @@ LINE_RE = re.compile(
 )
 KNOWN_SCRIPTS = {
     "update_roster", "update_schedule", "update_stats",
-    "update_lineup", "auto_swap",
+    "update_lineup", "auto_swap", "add_trade_target",
 }
 
 
