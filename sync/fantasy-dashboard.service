@@ -1,0 +1,13 @@
+[Unit]
+Description=Fantasy Baseball Dashboard
+After=network.target
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi/fantasy-baseball
+ExecStart=/home/pi/fantasy-baseball/venv/bin/python3 /home/pi/fantasy-baseball/sync/dashboard.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

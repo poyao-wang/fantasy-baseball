@@ -100,6 +100,11 @@
   - [x] 測試：dry-run swap_logic 確認換人邏輯正確
   - [x] RPi 部署 + cron 驗證
 - [x] Step 4.z：DB2 退役 + DB_Week 新架構（見下方詳細說明）
+- [x] Step 5.x：Pi5 手動觸發 Dashboard（Flask）
+  - [x] 安裝 Flask 到 Pi5 venv
+  - [x] 寫 `sync/dashboard.py`（Flask app，port 5001，三個按鈕，SSE streaming 輸出）
+  - [x] systemd service `fantasy-dashboard`（開機自動啟動）
+  - [x] Tailscale 連線確認（`http://pi5-1.local:5001`）
 - [ ] Step 5：投手策略（依本週 H2H 領先程度決定是否保護 ERA/WHIP）
 - [ ] Step 4.x：swap_logic 評分公式改用 HPI（`R + RBI + HR×2 + SB×2 + (AVG−0.250)×1000`）或直接讀 DB1 `HPI_7d` 欄位，取代現有 `AVG×300 + HR×5 + RBI×2 + R + SB×3`（低打率現行公式不懲罰，可能換上拖累 AVG 的球員）
 

@@ -34,7 +34,8 @@ fantasy-baseball/
 │   ├── setup_default_slot.py   Fantasy Roster Default_Slot 初始化（一次性）
 │   ├── swap_logic.py           OFF/OUT 偵測 → BN 候補依 7d 評分排名 → swap 清單
 │   ├── auto_swap.py            Playwright 執行換人，支援 --dry-run，結果寫入 sync.log
-│   └── sync_log.py             sync.log → Fantasy Sync Log（cursor 機制，只送新行；429 retry）
+│   ├── sync_log.py             sync.log → Fantasy Sync Log（cursor 機制，只送新行；429 retry）
+│   └── dashboard.py            Flask web dashboard（port 5001），手動觸發排程用
 ├── data/                 # 靜態資料
 │   └── league_info.json        聯盟設定、積分類別、球隊列表
 ├── 0_inbox/              # 暫存資料（不進 git）
@@ -197,6 +198,25 @@ scp yahoo_session.json pi@pi5-1.local:~/fantasy-baseball/
 ```
 
 > **注意**：ET 早上 8–9 點 Yahoo 網站偶爾很慢，session 驗證可能 timeout。`yahoo_playwright.py` 遇到 timeout 會樂觀假設 session 仍有效繼續執行，若實際 session 失效才會在 form submit 時報錯。
+
+## Dashboard（手動觸發）
+
+Flask web UI 跑在 Pi5 port 5001，透過 Tailscale 存取：
+
+```
+http://pi5-1.local:5001
+```
+
+三個按鈕對應三個排程，點下去即時顯示輸出（Server-Sent Events streaming）。
+systemd service `fantasy-dashboard` 開機自動啟動。
+
+```bash
+# 查看 log
+sudo journalctl -u fantasy-dashboard -n 30
+
+# 重啟
+sudo systemctl restart fantasy-dashboard
+```
 
 ## 注意事項
 

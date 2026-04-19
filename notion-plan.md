@@ -13,6 +13,7 @@ flowchart TD
         S1["cron: 每週一 9am JST<br/>update_roster.py<br/>update_schedule.py<br/>update_stats.py<br/>sync_log.py"]
         S2["cron: 每小時 22:00–08:00 JST<br/>update_lineup.py → auto_swap.py → sync_log.py"]
         S3["手動觸發<br/>add_trade_target.py<br/>（加入觀察球員時）"]
+        S4["Dashboard（port 5001）<br/>Flask web UI<br/>手動觸發三個排程"]
     end
 
     subgraph Notion["Notion DB"]
@@ -34,6 +35,7 @@ flowchart TD
     M -->|schedule / starter 兩週| S1
     M -->|lineups + schedule| S2
     Y -->|target player info| S3
+    S4 -->|觸發 S1 / S2 腳本| RPi
     S1 -->|upsert 球員資訊 + stats + schedule props| DB1
     S1 -->|Current_Week relation| DBW
     S1 -->|sync_log| DB4
@@ -190,7 +192,7 @@ Yahoo Fantasy API 不開放 Write scope 給一般開發者，陣容寫入改走 
 
 ```
 update_lineup.py（每小時）
-  → 更新 DB2 Lineup_Status（IN/OUT/TBD/OFF）
+  → 更新 DB1 Today_Status（IN/OUT/TBD/OFF/START）
   → 更新 DB1 Current_Slot（從 Yahoo API 同步）
 
 auto_swap.py（update_lineup 之後手動或 cron）
@@ -234,54 +236,8 @@ auto_swap.py（update_lineup 之後手動或 cron）
 ## 備註
 
 - DB1 用 `Player_ID` 做 upsert key
-- DB2 用 `Title`（姓名＋日期）做 upsert key
 - DB3 已整合進 DB1，stats 直接 PATCH DB1 對應球員的 page（Fantasy Stats DB ID 已廢棄）
 - Trade Target 的賽程跟自己球員完全相同結構，`add_trade_target.py` 加人後自動補齊本週賽程
 - Yahoo token 存在 RPi 本機 `oauth2.json`，`yahoo_oauth` 自動 refresh
 - Notion API key 存在 RPi 環境變數或 `.env`
 
----
-
-## 📝 變更紀錄
-
-### 2026-04-19 Step 4.z — DB2 退役 + DB_Week 新架構（腳本實作完成，待驗證）
-
-**動機**：DB2 每週建 7天 × N球員 ≈ 210 rows，API call 太多。改成 DB1 直接帶 14 個 schedule prop。
-
-**架構變更**：
-- DB2 Fantasy Schedule → 退役（Notion 保留歷史，不再寫入）
-- 新增 DB_Week（~26 rows，整季週次靜態表）
-- DB1 新增：`Current_Week`（Relation → DB_Week）+ `This_Mon～This_Sun` + `Next_Mon～Next_Sun`（14 個 rich_text）
-- 投手確認先發：prop 用 bold annotation（Notion 顯示粗體）
-
-**腳本變更**：
-- `setup_db_week.py`（新建，一次性執行）
-- `update_schedule.py`（完整重寫，移除 DB2 邏輯）
-- `update_lineup.py`（新增 schedule props hourly sync）
-- `add_trade_target.py`（移除 DB2 rows，改 PATCH DB1 schedule props）
-
----
-
-### 2026-04-19 07:35 JST
-
-**DB2 瘦身：Today_Status 搬進 DB1**
-
-- DB1 新增 `Today_Status`（Select）欄，每小時由 `update_lineup.py` 更新（IN/OUT/TBD/OFF/START）
-- `update_lineup.py`：`get_db1_my_roster()` 一次查詢取代原本三個函數；MLB teams API 建 id→abbrev 對照表；DB2 完全不寫入
-- `swap_logic.py`：`get_all_batters()` 帶回 today_status；移除 `get_today_lineup_status()`（DB2 query）
-- DB2 現為純靜態，週一建完整週後不再更新；hourly update 只動 DB1（~30 rows）
-
----
-
-### 2026-04-19 06:55 JST（Notion AI）
-
-**DB1 補齊 HPI 欄位**
-
-- 新增 `HPI_7d` / `HPI_30d` / `HPI_season`（Formula）至 DB1 打者 Stats 區塊
-- 公式：R + RBI + HR×2 + SB×2 + (AVG−0.250)×1000；投手行為空值回傳 0
-- HPI 為 Notion 端計算，`update_stats.py` 無需 PATCH 此欄
-
-**修正過時參照**
-
-- `auto_swap.py` 說明：「依 DB3 7d 評分排名」→「依 DB1 HPI_7d 評分排名」
-- Notion 設定表格：移除已廢棄的 Fantasy Stats DB ID（`d3de639b-…`）
