@@ -13,7 +13,7 @@ flowchart TD
         S1["cron: 每週一 9am JST<br/>update_roster.py<br/>update_schedule.py<br/>update_stats.py<br/>sync_log.py"]
         S2["cron: 每小時 22:00–08:00 JST<br/>update_lineup.py → auto_swap.py → sync_log.py"]
         S3["手動觸發<br/>add_trade_target.py<br/>（加入觀察球員時）"]
-        S4["Dashboard（port 5001）<br/>Flask web UI<br/>手動觸發三個排程"]
+        S4["Dashboard（port 5001）<br/>Flask web UI<br/>手動觸發三個排程 + 新增交易目標"]
     end
 
     subgraph Notion["Notion DB"]
@@ -126,7 +126,7 @@ flowchart TD
 | `update_schedule.py` | 每週一 | PATCH DB1 所有球員的 This_Mon～Next_Sun 14 個 schedule props + Current_Week relation；支援 --dry-run |
 | `update_stats.py` | 每週一 | 從 Yahoo API 拉數據，patch DB1 stats 欄位（_7d/_30d/_season） |
 | `update_lineup.py` | 每小時 22–08 JST | Yahoo API 同步 DB1 Current_Slot + MLB API 更新 DB1 Today_Status + schedule props（opposing SP 即時） |
-| `add_trade_target.py` | 手動 | 輸入球員姓名 → 查 Yahoo API → upsert DB1 + PATCH DB1 兩週 schedule props + patch stats |
+| `add_trade_target.py` | 手動（Dashboard 或 CLI） | 輸入球員姓名或 Yahoo ID → 查 Yahoo API → upsert DB1 + PATCH DB1 兩週 schedule props + patch stats；結果寫入 sync.log |
 | `setup_db_week.py` | 手動（一次性） | 建立 DB_Week Notion DB + 寫入整季 26 週次 + DB1 新增 14 個 schedule props + Current_Week relation |
 | `yahoo_playwright.py` | 手動（首次 / session 過期） | Yahoo 瀏覽器登入，session 存 yahoo_session.json |
 | `setup_default_slot.py` | 手動（一次性） | DB1 Default_Slot 從 Current_Slot 初始化 |
