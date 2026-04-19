@@ -173,7 +173,8 @@ DB2 每週建 7天 × N球員 = 200+ rows，API call 太多。
 - [x] `update_lineup.py` 修改後本機測試
 - [x] `add_trade_target.py` 修改後本機測試
 - [x] RPi 部署 + 下週一 cron 驗證
-- [ ] DB2 腳本依賴全部清除後 archive DB2（Notion 端手動 archive）
+- [x] DB2 腳本依賴全部清除後 archive DB2（Notion 端手動 archive）
+- [x] DB3（Fantasy Stats）Notion 端 archive（已整合進 DB1）
 
 ### 其他功能
 - [ ] 投手陣容對戰表（上場日、對手打線強度）

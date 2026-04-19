@@ -87,3 +87,4 @@
 2026-04-19 [Fix] update_lineup.py MLB schedule API 不含 team abbreviation 欄位：改先拉 /teams?sportId=1 建 id→abbrev mapping，再對照 playing_team_ids 判斷今日出賽球隊
 2026-04-19 [Verify] Pi5 手動驗證：update_roster 27/27、update_lineup Today_Status 27 更新（Paul Skenes→START、Donovan→OUT 等正確）、auto_swap dry-run 換人計畫正常（Will Smith→BN/Jeffers→C + Jeffers→BN/Riley→Util）；hourly update 現在只動 DB1，DB2 整週靜態
 2026-04-19 [Refactor] Step 4.z 腳本實作完成：新建 setup_db_week.py（一次性：建 DB_Week Notion DB + 寫 26 週次 + DB1 加 14 個 schedule props + Current_Week relation）；update_schedule.py 完整重寫（移除 DB2 建 rows 邏輯，改 PATCH DB1 This_Mon～Next_Sun 14 個 rich_text props，投手確認先發用 bold annotation，支援 --dry-run）；update_lineup.py 新增 hourly schedule props sync（opposing SP 開賽前即時反映）；add_trade_target.py 移除 DB2 7天 rows 建立，改 PATCH DB1 兩週 schedule props；notion_config.py 加入 DB_WEEK 佔位，DB_SCHEDULE 標記 deprecated；待 setup_db_week.py 實際執行後進行驗證
+2026-04-19 [Archive] Notion 端 Fantasy Schedule（DB2）與 Fantasy Stats（DB3）正式 archive；所有腳本已不再讀寫，資料保留但退出作業流程

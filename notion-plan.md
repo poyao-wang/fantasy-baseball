@@ -105,10 +105,14 @@ flowchart TD
 
 ---
 
-### ~~DB2：Fantasy Schedule（已退役）~~
+### ~~DB2：Fantasy Schedule（已 archive）~~
 
 原為每日賽況（每球員 × 7天 rows），週一建立 ~210 rows API 呼叫太多。
-已整合進 DB1 的 14 個 schedule props，DB2 Notion 端保留歷史但不再寫入。
+已整合進 DB1 的 14 個 schedule props，Notion 端已 archive。
+
+### ~~DB3：Fantasy Stats（已 archive）~~
+
+原為區間統計快照（每球員 3 筆），已整合進 DB1 的 `_7d/_30d/_season` props，Notion 端已 archive。
 
 ---
 
@@ -167,8 +171,9 @@ flowchart TD
 | API Key | `~/.config/notion/api_key_new` |
 | Parent page | `34048ad3-2a1c-80a0-bcaa-ca973c2d4100` |
 | Fantasy Roster | `1eb4bb64-da35-4e9d-b740-f36c8569d3a6` |
-| Fantasy Schedule（已退役） | `4bf3af3c-7095-493a-8746-5ad0fc9f147f` |
-| DB_Week | 執行 setup_db_week.py 後填入 |
+| Fantasy Schedule（已 archive） | `4bf3af3c-7095-493a-8746-5ad0fc9f147f` |
+| Fantasy Stats（已 archive） | `d3de639b-94af-44e3-9795-9ac965bb5419` |
+| DB_Week | `34648ad3-2a1c-8135-9968-c5830f8f99a9` |
 | Fantasy Sync Log | `34148ad3-2a1c-8141-ace0-df0667ecc04d` |
 
 詳細設定見 `notion_config.py`。
