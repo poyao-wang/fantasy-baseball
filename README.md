@@ -68,11 +68,16 @@ crash 時記 `ERROR: <訊息>`，方便排查。
 
 ## Cron 排程（RPi，時區 JST）
 
-| 時間 | 腳本 | 說明 |
-|------|------|------|
-| 每週一 09:00 | roster → schedule → stats → sync_log | 陣容 / 賽程 / 統計全量更新 |
-| 每日 18:30 | roster → sync_log | Waiver 結果（約 17:30）後自動同步 Notion |
-| 每日 22:00–翌日 08:00，每小時整點 | lineup → auto_swap → sync_log | 打線更新 + 自動換人 |
+| 時間（JST） | 對應 ET | 腳本 | 說明 |
+|------|------|------|------|
+| 每週一 09:00 | 週日 20:00 ET | roster → schedule → stats → sync_log | 陣容 / 賽程 / 統計全量更新 |
+| 每日 18:30 | 05:30 ET | roster → sync_log | Waiver 處理（約 03:00 ET）後自動同步 Notion |
+| 每日 22:00–翌日 08:00，每小時整點 | 09:00–19:00 ET | lineup → auto_swap → sync_log | 打線更新 + 自動換人 |
+
+**注意事項：**
+- **時區依賴**：cron 以 Pi5 系統時區（JST）計算，若時區設定被更動所有排程會整體偏移
+- **夏令時間（DST）**：ET 夏令（EDT, UTC-4）與冬令（EST, UTC-5）切換時，JST↔ET 偏差會從 13h 變成 14h，Waiver 時間仍準確但對照表數字需注意
+- **錯誤不顯示**：所有 cron output 導向 `/dev/null`，腳本層錯誤只能查 `sync.log`
 
 ## 常用指令
 

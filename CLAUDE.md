@@ -17,11 +17,12 @@ Yahoo Fantasy Baseball 陣容管理工具。
 ## 資料夾結構
 
 ```
-scripts/    手動查詢腳本（本機用）
-sync/       Notion 同步腳本（RPi cron 用）
-data/       靜態資料（league_info.json）
-cache/      當日 API 快取（自動產生，不進 git）
-output/     輸出 md 檔（自動產生，不進 git）
+scripts/      手動查詢腳本（本機用）
+sync/         Notion 同步腳本（RPi cron 用）
+data/         靜態資料（league_info.json）
+cache/        當日 API 快取（自動產生，不進 git）
+output/       輸出 md 檔（自動產生，不進 git）
+crontab.txt   Pi5 cron 設定參考（套用：crontab crontab.txt）
 ```
 
 ## Notion DB IDs（詳見 sync/notion_config.py）

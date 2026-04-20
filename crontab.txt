@@ -1,0 +1,21 @@
+# Pi5 crontab 參考檔（pi@pi5-1.local）
+# 時區：JST（UTC+9），日本無夏令時間，全年固定
+#
+# 套用方式：crontab crontab.txt
+#
+# m h  dom mon dow   command
+
+# 其他服務
+0 3 * * * /home/pi/immich_auto_backup.sh >> /home/pi/backup_log.txt 2>&1
+
+# Fantasy Baseball - 每週一 09:00 JST（週日 20:00 EDT）：陣容 / 賽程 / 統計全量更新
+0 9 * * 1 cd /home/pi/fantasy-baseball && venv/bin/python3 sync/update_roster.py > /dev/null 2>&1 && venv/bin/python3 sync/update_schedule.py > /dev/null 2>&1 && venv/bin/python3 sync/update_stats.py > /dev/null 2>&1 && venv/bin/python3 sync/sync_log.py > /dev/null 2>&1
+
+# Fantasy Baseball - 每天 18:30 JST（05:30 EDT）：Waiver 處理（約 03:00 ET）後更新陣容
+30 18 * * * cd /home/pi/fantasy-baseball && venv/bin/python3 sync/update_roster.py > /dev/null 2>&1; venv/bin/python3 sync/sync_log.py > /dev/null 2>&1
+
+# Fantasy Baseball - 每小時（22:00–翌日 08:00 JST = 09:00–19:00 EDT）：打線更新 + 自動換人
+0 22-23,0-8 * * * cd /home/pi/fantasy-baseball && venv/bin/python3 sync/update_lineup.py > /dev/null 2>&1 && venv/bin/python3 sync/auto_swap.py > /dev/null 2>&1; venv/bin/python3 sync/sync_log.py > /dev/null 2>&1
+
+# Touch on Time
+0 * * * *  cd ~/touch-on-time-auto && venv/bin/python check_schedule.py >> sync.log 2>&1

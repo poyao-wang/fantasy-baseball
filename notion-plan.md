@@ -10,8 +10,9 @@ flowchart TD
     end
 
     subgraph RPi["Raspberry Pi（自動化）"]
-        S1["cron: 每週一 9am JST<br/>update_roster.py<br/>update_schedule.py<br/>update_stats.py<br/>sync_log.py"]
-        S2["cron: 每小時 22:00–08:00 JST<br/>update_lineup.py → auto_swap.py → sync_log.py"]
+        S1["cron: 每週一 09:00 JST<br/>update_roster.py<br/>update_schedule.py<br/>update_stats.py<br/>sync_log.py"]
+        S2["cron: 每日 18:30 JST<br/>update_roster.py → sync_log.py<br/>（Waiver 處理後）"]
+        S2b["cron: 每小時 22:00–08:00 JST<br/>update_lineup.py → auto_swap.py → sync_log.py"]
         S3["手動觸發<br/>add_trade_target.py<br/>（加入觀察球員時）"]
         S4["Dashboard（port 5001）<br/>Flask web UI<br/>手動觸發三個排程 + 新增交易目標"]
     end
@@ -33,14 +34,17 @@ flowchart TD
     Y -->|roster / eligible_positions| S1
     Y -->|season stats| S1
     M -->|schedule / starter 兩週| S1
-    M -->|lineups + schedule| S2
+    M -->|lineups + schedule| S2b
+    Y -->|roster（Waiver 後）| S2
     Y -->|target player info| S3
     S4 -->|觸發 S1 / S2 腳本| RPi
     S1 -->|upsert 球員資訊 + stats + schedule props| DB1
     S1 -->|Current_Week relation| DBW
     S1 -->|sync_log| DB4
-    S2 -->|Today_Status + schedule props + auto_swap| DB1
+    S2 -->|roster update| DB1
     S2 -->|sync_log| DB4
+    S2b -->|Today_Status + schedule props + auto_swap| DB1
+    S2b -->|sync_log| DB4
     S3 -->|upsert + schedule props| DB1
     DB1 --> V1
     DB1 --> V2
