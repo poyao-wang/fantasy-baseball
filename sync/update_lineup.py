@@ -237,6 +237,11 @@ def get_today_game_data(today_str: str) -> tuple[set[str], set[str], set[str], s
 
     for d in r.json().get("dates", []):
         for game in d.get("games", []):
+            # PPD / Cancelled / Suspended → 不算今日有賽
+            if game.get("status", {}).get("detailedState", "") in (
+                "Postponed", "Cancelled", "Suspended"
+            ):
+                continue
             for side in ("home", "away"):
                 team = game["teams"][side]
                 team_id = team["team"]["id"]
