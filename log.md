@@ -90,3 +90,5 @@
 2026-04-19 [Archive] Notion 端 Fantasy Schedule（DB2）與 Fantasy Stats（DB3）正式 archive；所有腳本已不再讀寫，資料保留但退出作業流程
 2026-04-19 10:58 [Feature] sync/dashboard.py — Flask web dashboard，port 5001，三個按鈕手動觸發排程（全量更新 / 陣容同步 / 打線+換人），SSE streaming 即時顯示輸出；systemd service 開機自動啟動，Tailscale 內網存取
 2026-04-19 [Feature] dashboard 新增「新增交易目標」card：input 輸入球員姓名或 Yahoo ID（Enter 或按鈕送出），走 /run/trade route，自動接 sync_log；add_trade_target.py 執行完寫一行到 sync.log；sync_log KNOWN_SCRIPTS 加入 add_trade_target；部署改為 git push → Pi5 git pull 流程
+2026-04-25 [Research] Yahoo Fantasy API 能力邊界探查：確認 yahoo_fantasy_api 為第三方套件（非官方）；官方 REST API 支援 lastweek/lastmonth/season 三個時間段，無 last14days；Current Ranking 不在 REST API，但可用 Playwright 爬 DOM（cells[6]=Pre-Season rank, cells[7]=Current rank，URL 加 stat1=S_L14 可同時取得 14 天 stats）；新增探索腳本 scripts/test_raw_api.py / sniff_yahoo_api.py / sniff_html.py
+2026-04-26 [Fix] update_lineup.py 過濾 PPD/Cancelled/Suspended 比賽：MLB Stats API 延賽仍出現在 schedule 回傳中（detailedState="Postponed"），導致球員所屬球隊被誤加入 playing_team_abbrevs，Today_Status 判為 TBD 而非 OFF，auto_swap 未偵測需換人（Mickey Moniak PPD 未自動換 Andy Pages）；在 get_today_game_data() 加入 detailedState 過濾修正

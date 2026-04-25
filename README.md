@@ -21,7 +21,10 @@ fantasy-baseball/
 │   ├── opponent_schedule.py    未來一週對戰投手表 + 今日打線狀態
 │   ├── export_schedule_md.py   對戰表輸出為 Markdown
 │   ├── roster_flex.py          陣容彈性一覽
-│   └── fetch_league_info.py    抓取聯盟靜態資訊
+│   ├── fetch_league_info.py    抓取聯盟靜態資訊
+│   ├── test_raw_api.py         Yahoo 官方 REST API 探索腳本（探索用）
+│   ├── sniff_yahoo_api.py      Playwright 攔截 Yahoo 前端 API calls（探索用）
+│   └── sniff_html.py           Playwright 爬 DOM 找 ranking / stats 結構（探索用）
 ├── sync/                 # Notion 同步腳本（RPi cron 用）
 │   ├── notion_config.py        Notion DB IDs 設定
 │   ├── update_roster.py        陣容 upsert → Fantasy Roster（每週一）+ 自動清除離隊球員
@@ -125,7 +128,7 @@ python3.12 sync/sync_log.py
 | `OUT` | 打者 | 今日有賽但不在打線 |
 | `START` | 投手 | 今日先發 |
 | `TBD` | 打者／投手 | 打線未公布 / 投手有賽但非先發 |
-| `OFF` | 全部 | 休息日（無比賽） |
+| `OFF` | 全部 | 休息日（無比賽）或比賽延賽（PPD） |
 
 ## 記錄慣例
 
@@ -135,6 +138,17 @@ python3.12 sync/sync_log.py
 - `README.md`（結構或指令有異動時）
 - `todo.md`（完成打勾、新增待辦）
 - `notion-plan.md`（架構設計有異動時）
+
+## Yahoo API 能力邊界
+
+| 功能 | 方式 | 備註 |
+|------|------|------|
+| Stats（7d/30d/season） | REST API `lastweek`/`lastmonth`/`season` | `last14days` 不存在 |
+| Current Ranking 數字 | Playwright 爬 DOM | cells[6]=Pre-Season, cells[7]=Current |
+| 14 天 stats | Playwright 爬 DOM | URL 加 `stat1=S_L14` |
+| 陣容寫入（換人） | Playwright POST form | API 無 Write scope |
+
+`yahoo_fantasy_api` 套件為第三方（非官方），底層打 `https://fantasysports.yahooapis.com/fantasy/v2/`。
 
 ## 陣容自動換人
 

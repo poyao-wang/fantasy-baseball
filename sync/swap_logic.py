@@ -262,12 +262,13 @@ def compute_swap_plan(
         restored_ids.add(cand["player_id"])
 
     # ── Phase 2: Replace（替補）──────────────────────────────
-    # 條件：Current_Slot 在先發格（球員實際佔著位子）且 今日 OUT 或 OFF
+    # 條件：Current_Slot 在先發格（球員實際佔著位子）且 今日 OUT / OFF 或 status=IL
+    # IL 球員不在 MLB active roster，today_status 永遠是 TBD，需額外判斷
     empty_slots: list[dict] = []
     for pid, info in batters.items():
         if info["current_slot"] not in STARTING_SLOTS:
             continue  # 已在 BN/IL，不需處理（Yahoo 或上一次換人已處理）
-        if info["today_status"] not in ("OUT", "OFF"):
+        if info["today_status"] not in ("OUT", "OFF") and info["status"] != "IL":
             continue
         empty_slots.append({
             "slot": info["current_slot"],   # 用實際佔用的格子，不是 default

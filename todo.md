@@ -109,6 +109,7 @@
   - [x] add_trade_target.py 執行結果寫入 sync.log，sync_log 白名單加入 add_trade_target
 - [ ] Step 5：投手策略（依本週 H2H 領先程度決定是否保護 ERA/WHIP）
 - [ ] Step 4.x：swap_logic 評分公式改用 HPI（`R + RBI + HR×2 + SB×2 + (AVG−0.250)×1000`）或直接讀 DB1 `HPI_7d` 欄位，取代現有 `AVG×300 + HR×5 + RBI×2 + R + SB×3`（低打率現行公式不懲罰，可能換上拖累 AVG 的球員）
+- [ ] 探索：用 Playwright 爬球員 Current Ranking + 14 天 stats → 跑回歸驗證 Yahoo ranking 公式，可作為 swap_logic 評分的 ground truth 參考
 
 ---
 

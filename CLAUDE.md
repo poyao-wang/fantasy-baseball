@@ -54,9 +54,20 @@ crontab.txt   Pi5 cron 設定參考（套用：crontab crontab.txt）
 {1–3 行摘要，說明做了什麼、現在狀態、下一步}
 ```
 
+## Yahoo API 知識庫
+
+- `yahoo_fantasy_api` 是**第三方套件**（非官方），底層是打 Yahoo 官方 REST API
+- 官方端點：`https://fantasysports.yahooapis.com/fantasy/v2/`
+- Stats 可用時間段：`lastweek` / `lastmonth` / `season`，**沒有 `last14days`**
+- **Current Ranking 無法從 REST API 取得**，只能靠 Playwright 爬 DOM
+  - 球員列表頁 DOM 結構：`cells[6]` = Pre-Season rank，`cells[7]` = Current rank
+  - URL 加 `stat1=S_L14` 可讓頁面顯示 14 天 stats（cells[9-14] = H/AB, R, HR, RBI, SB, AVG）
+- Ranking 公式推測方向：對球員 stats 跑 z-score 加權，可用 Playwright 爬樣本後做回歸驗證
+
 ## 踩坑紀錄
 
 - Mermaid 節點標籤換行必須用 `<br/>`，不能用 `\n`（`\n` 不會被解析，直接顯示成原文）
+- MLB Stats API 的 PPD（延賽）比賽仍出現在 schedule 回傳中，`status.detailedState` 為 `"Postponed"`；需主動過濾，否則延賽球員的 `Today_Status` 會被誤判為 `TBD`（非 `OFF`），導致 auto_swap 未觸發換人
 
 ## 溝通
 
