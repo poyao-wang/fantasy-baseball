@@ -10,6 +10,7 @@ session 存在專案根目錄 yahoo_session.json（勿 commit）。
 
 之後腳本直接 import get_context() 即可拿到已登入的 context。
 """
+import os
 import sys
 import asyncio
 from pathlib import Path
@@ -80,7 +81,14 @@ async def get_context_async():
         await context.close()
         await browser.close()
 
-    # 需要互動登入
+    # 需要互動登入 — headless 環境（Pi5 等無 X server）無法執行，提早報錯
+    if not os.environ.get("DISPLAY") and sys.platform != "darwin":
+        await playwright.stop()
+        raise RuntimeError(
+            "[yahoo_playwright] Session 不存在或已失效，且目前環境無法開啟有頭瀏覽器。\n"
+            "請在本機執行：python3 sync/yahoo_playwright.py --reauth\n"
+            "然後 scp yahoo_session.json pi@pi5-1.local:/home/pi/fantasy-baseball/"
+        )
     context = await _interactive_login(playwright)
     browser = context.browser
     return playwright, browser, context
