@@ -20,6 +20,7 @@ from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).parent))
 from notion_config import NOTION_KEY_PATH, DB_PLAYERS
+from telegram_notify import send as tg_send
 
 LEAGUE_ID  = "469.l.171948"
 DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -420,6 +421,7 @@ def main():
         )
     except Exception as e:
         _append_sync_log(f"[update_lineup] ERROR: {e}")
+        tg_send(f"❌ [update_lineup] ERROR\n{e}")
         raise
 
 

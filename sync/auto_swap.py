@@ -24,6 +24,7 @@ from zoneinfo import ZoneInfo
 sys.path.insert(0, str(Path(__file__).parent))
 from swap_logic import get_swap_plan
 from yahoo_playwright import get_context_async, cleanup_async
+from telegram_notify import send as tg_send
 
 LEAGUE_ID = "171948"
 TEAM_ID = "3"
@@ -257,6 +258,7 @@ def main():
 
     except Exception as e:
         _append_sync_log(f"[auto_swap] ERROR: {e}")
+        tg_send(f"❌ [auto_swap] ERROR\n{e}")
         raise
 
 
