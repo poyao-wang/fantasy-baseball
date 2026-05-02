@@ -152,11 +152,13 @@ def main():
 
         print("[Yahoo] 拉取 Roster% (percent_owned)...")
         try:
-            pct_raw = league.percent_owned([int(i) for i in yahoo_ids])
-            pct_owned_map: dict[int, float] = {
-                item["player_id"]: item["percent_owned"]
-                for item in pct_raw
-            }
+            int_ids = [int(i) for i in yahoo_ids]
+            pct_owned_map: dict[int, float] = {}
+            batch_size = 25
+            for i in range(0, len(int_ids), batch_size):
+                batch = int_ids[i:i + batch_size]
+                for item in league.percent_owned(batch):
+                    pct_owned_map[item["player_id"]] = item["percent_owned"]
             print(f"  → 取得 {len(pct_owned_map)} 人\n")
         except Exception as e:
             print(f"  [錯誤] 無法取得 percent_owned: {e}\n")
