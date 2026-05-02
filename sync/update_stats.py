@@ -110,10 +110,14 @@ def patch_player_stats(
     key: str,
     player: dict,
     all_stats: dict[str, dict[str, float | None]],
+    pct_owned: float | None = None,
 ) -> None:
     """all_stats = {"7d": {...}, "30d": {...}, "season": {...}}"""
     now_iso = datetime.now(ZoneInfo("Asia/Tokyo")).isoformat()
     props: dict = {"Stats_Updated_At": {"date": {"start": now_iso}}}
+
+    if pct_owned is not None:
+        props["Pct_Owned"] = {"number": pct_owned / 100}
 
     for period_label, stats in all_stats.items():
         for stat, value in stats.items():
@@ -146,6 +150,18 @@ def main():
 
         yahoo_ids = [str(p["player_id"]) for p in players]
 
+        print("[Yahoo] 拉取 Roster% (percent_owned)...")
+        try:
+            pct_raw = league.percent_owned([int(i) for i in yahoo_ids])
+            pct_owned_map: dict[int, float] = {
+                item["player_id"]: item["percent_owned"]
+                for item in pct_raw
+            }
+            print(f"  → 取得 {len(pct_owned_map)} 人\n")
+        except Exception as e:
+            print(f"  [錯誤] 無法取得 percent_owned: {e}\n")
+            pct_owned_map = {}
+
         stats_by_period: dict[str, dict[int, dict]] = {}
         for period_label, req_type in PERIODS:
             print(f"[Yahoo] 拉取 {period_label}（{req_type}）stats...")
@@ -172,7 +188,7 @@ def main():
             }
 
             try:
-                patch_player_stats(notion_key, player, all_stats)
+                patch_player_stats(notion_key, player, all_stats, pct_owned_map.get(pid))
                 s7 = all_stats["7d"]
                 if pos == "B":
                     summary = (
