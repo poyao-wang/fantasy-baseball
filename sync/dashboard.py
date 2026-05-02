@@ -40,6 +40,14 @@ JOBS = {
             [PYTHON, f"{BASE}/sync/sync_log.py"],
         ],
     },
+    "stats": {
+        "label": "Stats 更新（手動）",
+        "desc": "update_stats + sync_log",
+        "cmds": [
+            [PYTHON, f"{BASE}/sync/update_stats.py"],
+            [PYTHON, f"{BASE}/sync/sync_log.py"],
+        ],
+    },
 }
 
 _lock = threading.Lock()
