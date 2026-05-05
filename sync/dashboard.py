@@ -48,6 +48,14 @@ JOBS = {
             [PYTHON, f"{BASE}/sync/sync_log.py"],
         ],
     },
+    "swap": {
+        "label": "自動換人（手動）",
+        "desc": "auto_swap + sync_log",
+        "cmds": [
+            [PYTHON, f"{BASE}/sync/auto_swap.py"],
+            [PYTHON, f"{BASE}/sync/sync_log.py"],
+        ],
+    },
 }
 
 _lock = threading.Lock()
