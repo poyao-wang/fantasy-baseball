@@ -271,6 +271,8 @@ def compute_swap_plan(
     for pid, info in batters.items():
         if info["current_slot"] not in STARTING_SLOTS:
             continue  # 已在 BN/IL，不需處理（Yahoo 或上一次換人已處理）
+        if pid in displaced_ids:
+            continue  # Phase 1 已將此人移出並補上替補，格子已滿，不需 Phase 2 再處理
         # DTD 且未確認上場（非 IN）→ 主動換下，避免球員不出賽卻佔著先發格
         is_dtd_uncertain = info["status"] == "DTD" and info["today_status"] != "IN"
         if info["today_status"] not in ("OUT", "OFF") and info["status"] != "IL" and not is_dtd_uncertain:
