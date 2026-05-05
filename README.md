@@ -228,7 +228,15 @@ Flask web UI 跑在 Pi5 port 5001，透過 Tailscale 存取：
 http://pi5-1.local:5001
 ```
 
-三個排程按鈕 + 「新增交易目標」card（輸入球員姓名或 Yahoo ID，Enter 或按鈕送出），點下去即時顯示輸出（Server-Sent Events streaming）。
+五個排程按鈕 + 「新增交易目標」card（輸入球員姓名或 Yahoo ID，Enter 或按鈕送出），點下去即時顯示輸出（Server-Sent Events streaming）。
+
+| 按鈕 | 執行腳本 |
+|------|---------|
+| 全量更新（週一） | update_roster + update_schedule + update_stats + sync_log |
+| 陣容同步（每日） | update_roster + sync_log |
+| 打線更新 + 自動換人（每小時） | update_lineup + auto_swap + sync_log |
+| Stats 更新（手動） | update_stats + sync_log |
+| 自動換人（手動） | auto_swap + sync_log |
 systemd service `fantasy-dashboard` 開機自動啟動。
 
 ```bash

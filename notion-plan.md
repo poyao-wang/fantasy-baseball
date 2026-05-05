@@ -14,7 +14,7 @@ flowchart TD
         S2["cron: 每日 18:30 JST<br/>update_roster.py → sync_log.py<br/>（Waiver 處理後）"]
         S2b["cron: 每小時 22:00–08:00 JST<br/>update_lineup.py → auto_swap.py → sync_log.py"]
         S3["手動觸發<br/>add_trade_target.py<br/>（加入觀察球員時）"]
-        S4["Dashboard（port 5001）<br/>Flask web UI<br/>手動觸發三個排程 + 新增交易目標"]
+        S4["Dashboard（port 5001）<br/>Flask web UI<br/>手動觸發五個排程 + 新增交易目標"]
     end
 
     subgraph Notion["Notion DB"]
@@ -134,7 +134,7 @@ flowchart TD
 | `setup_db_week.py` | 手動（一次性） | 建立 DB_Week Notion DB + 寫入整季 26 週次 + DB1 新增 14 個 schedule props + Current_Week relation |
 | `yahoo_playwright.py` | 手動（首次 / session 過期） | Yahoo 瀏覽器登入，session 存 yahoo_session.json |
 | `setup_default_slot.py` | 手動（一次性） | DB1 Default_Slot 從 Current_Slot 初始化 |
-| `swap_logic.py` | 被 auto_swap.py import | 四階段換人邏輯（Rebalance / Restore / Replace / Chain Swap） |
+| `swap_logic.py` | 被 auto_swap.py import | 四階段換人邏輯（Rebalance / Restore / Replace / Chain Swap）；EXPECTED_STARTING_SLOTS 偵測交易後空格 |
 | `auto_swap.py` | 每小時 22–08 JST（update_lineup 之後） | Playwright 執行換人，支援 --dry-run，fallback locked_pids，結果寫 sync.log |
 | `sync_log.py` | 每小時 / 週一全量末尾 | sync.log → DB4 Fantasy Sync Log；cursor 機制（sync.log.cursor）只送新增行，429 自動 retry |
 
@@ -200,7 +200,7 @@ update_lineup.py（每小時）
   → 更新 DB1 Current_Slot（從 Yahoo API 同步）
 
 auto_swap.py（update_lineup 之後手動或 cron）
-  ├── swap_logic.py：三階段換人邏輯
+  ├── swap_logic.py：四階段換人邏輯
   │     Phase 0 — Rebalance（先發格對調）
   │       - 找出互換錯位的兩人（都在先發格但守著對方的 Default_Slot）
   │       - 直接對調，不經過 BN
@@ -208,9 +208,10 @@ auto_swap.py（update_lineup 之後手動或 cron）
   │       - 找出 Default_Slot 在先發格但目前在 BN 且今日 IN/TBD 的球員
   │       - 找佔著該格的 intruder（Default_Slot ≠ 該格），踢去 BN，原主人換回
   │     Phase 2 — Replace（替補）
-  │       - 找出 Current_Slot 在先發格且今日 OFF/OUT 的球員
-  │       - 從 BN（含 Phase 1 換下的 intruder）找最佳候補補上
-  │       - 依 DB1 HPI_7d 評分排名，Util 格接受任意打者
+  │       - 找出 Current_Slot 在先發格且今日 OFF/OUT 的球員（已被 Phase 1 displaced 者跳過）
+  │       - 偵測交易後真正空格（EXPECTED_STARTING_SLOTS vs slot_occupants，out=None）
+  │       - 從 BN（含 Phase 1 換下的 intruder，排除 DTD 未確認者）找最佳候補補上
+  │       - 依 DB1 7d 評分排名，Util 格接受任意打者
   │       - in=None 代表無可用替補
   │     Phase 2.5 — Chain Swap（連鎖換人）
   │       - BN 找不到直接替補時，從其他先發格找有資格球員移過去

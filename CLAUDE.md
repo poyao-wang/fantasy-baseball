@@ -76,6 +76,7 @@ crontab.txt   Pi5 cron 設定參考（套用：crontab crontab.txt）
 - MLB Stats API 的 PPD（延賽）比賽仍出現在 schedule 回傳中，`status.detailedState` 為 `"Postponed"`；需主動過濾，否則延賽球員的 `Today_Status` 會被誤判為 `TBD`（非 `OFF`），導致 auto_swap 未觸發換人
 - `yahoo_session.json` 遺失或失效時，Pi5（無 X server）會嘗試開有頭瀏覽器並炸掉；`yahoo_playwright.py` 已加防呆（無 DISPLAY 環境直接 raise RuntimeError）。修復流程：在本機執行 `python3 sync/yahoo_playwright.py --reauth`，完成後 `scp yahoo_session.json pi@pi5-1.local:~/fantasy-baseball/`
 - Yahoo session 壽命約 **2 週**（實測：4/13 建立，4/29 到期）。到期時 Telegram 會推播，收到再處理即可，不需定期主動 reauth
+- Yahoo editroster form **靜默拒絕**超額指派：同一 slot type 若有超過預期數量的球員同時指派（如 3 個 OF 格塞 4 人），Yahoo 不回錯誤頁，URL 照常跳回陣容頁，但實際上什麼都沒變。swap_logic Phase 1 displaced 的球員格子已滿，Phase 2 需跳過（否則會重複指派）
 
 ## 溝通
 

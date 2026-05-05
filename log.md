@@ -95,3 +95,5 @@
 2026-04-30 [Fix] auto_swap 連續報錯修復：yahoo_session.json 遺失導致 Playwright 每次 fallback 到有頭瀏覽器，Pi5 無 X server 炸掉；yahoo_playwright.py 加入 headless 環境防呆（無 DISPLAY 時直接 raise RuntimeError 附修復指令）；本機 --reauth 產生新 session 並 scp 到 Pi5；dry-run 驗證換人計畫正常（SS Brooks Lee / C Carter Jensen）
 2026-04-30 [Feature] Telegram 錯誤通知：新增 sync/telegram_notify.py（config 存 ~/.config/fantasy_baseball_telegram.json）；auto_swap / update_lineup except 塊接 tg_send，出錯時即時推播手機；Pi5 + 本機 config 均已部署並驗證
 2026-05-05 15:25 [Fix] add_trade_target.py 新增 Ros%（Pct_Owned）抓取：新增 fetch_pct_owned() 呼叫 league.percent_owned([player_id])，寫回 DB1 Pct_Owned 欄位（除以 100 換成小數），與 update_stats.py 邏輯一致
+2026-05-05 [Fix] auto_swap.py + swap_logic.py 三個 bug 修正：① 交易後空格未補人：新增 EXPECTED_STARTING_SLOTS 常數，Phase 2 偵測 slot_occupants 低於預期數量時補入 empty_slots（out=None），觸發原有空格填補邏輯；② DTD 球員自我對調：available_bench 排除 DTD+未確認球員，防止同一人同時出現在 empty_slots 和 available_bench 造成 JS 設值互相抵銷；③ Phase 1 displaced 球員被 Phase 2 重複處理：displaced 球員的格子已由 Phase 1 補滿，Phase 2 不跳過會導致同一 slot type 超額指派（如 OF 塞 4 人），Yahoo 靜默拒絕整個 form
+2026-05-05 [Feature] dashboard.py 新增「自動換人（手動）」按鈕：只跑 auto_swap + sync_log，不需帶 update_lineup，適合交易後手動補空格或重跑失敗的換人
