@@ -42,6 +42,9 @@ from notion_config import NOTION_KEY_PATH, DB_PLAYERS
 # 計分的先發格（不含 BN / IL / SP / RP / P）
 STARTING_SLOTS = {"C", "1B", "2B", "3B", "SS", "OF", "Util"}
 
+# 這支隊伍的先發格預期數量（用於偵測空格）
+EXPECTED_STARTING_SLOTS = {"C": 1, "1B": 1, "2B": 1, "3B": 1, "SS": 1, "OF": 3, "Util": 2}
+
 
 # ── Notion helpers ────────────────────────────────────────────
 
@@ -281,6 +284,12 @@ def compute_swap_plan(
             },
         })
 
+    # 偵測真正空格（交易後新球員放在 BN，原先發格沒人）
+    for slot_type, expected_count in EXPECTED_STARTING_SLOTS.items():
+        actual_count = len(slot_occupants.get(slot_type, []))
+        for _ in range(expected_count - actual_count):
+            empty_slots.append({"slot": slot_type, "out": None})
+
     if empty_slots:
         # 可用替補：原本在 BN（非換回者）+ Phase 1 換下的 intruder，今日 IN/TBD 且非 IL
         available_bench: list[dict] = []
@@ -288,6 +297,9 @@ def compute_swap_plan(
             if info["status"] == "IL":
                 continue
             if info["today_status"] not in ("IN", "TBD"):
+                continue
+            # DTD 且未確認上場的球員不能作為替補（否則會自我對調）
+            if info["status"] == "DTD" and info["today_status"] != "IN":
                 continue
             if pid in restored_ids:
                 continue  # 已被 Phase 1 換上先發
