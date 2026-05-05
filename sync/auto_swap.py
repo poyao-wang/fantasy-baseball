@@ -250,7 +250,7 @@ def main():
 
         # sync.log 摘要
         summary = " | ".join(
-            f"{s['slot']}:{s['out']['name']}→{s['in']['name']}"
+            f"{s['slot']}:{s['out']['name'] if s['out'] else '(空格)'}→{s['in']['name']}"
             for s in all_actionable
             if s["in"]
         )
