@@ -50,7 +50,7 @@
   - [x] RPi 手動測試 `auto_swap.py --dry-run` 確認正常
   - [x] 更新 RPi cron：`update_lineup.py && auto_swap.py`
   - [x] cron 自動觸發確認（22:00 JST，sync.log 有 [auto_swap] 紀錄）
-  - [ ] 說明 session 過期處理流程（Mac 重新登入 → scp → RPi 自動恢復）
+  - [x] 說明 session 過期處理流程（Mac 重新登入 → scp → RPi 自動恢復）；Pi5 headless 防呆已加入 yahoo_playwright.py
 - [x] **Fix** update_roster.py 離隊清除：upsert 後自動 archive Notion My Roster 中不在 Yahoo 陣容的 pages（修正 Abner Uribe 殘留問題）
 - [x] Step 4.5：swap_logic 換回邏輯修正
   - [x] Phase 0 Rebalance：先發格互換錯位（Riley↔Muncy）直接對調
@@ -100,6 +100,7 @@
   - [x] 測試：dry-run swap_logic 確認換人邏輯正確
   - [x] RPi 部署 + cron 驗證
 - [x] Step 4.z：DB2 退役 + DB_Week 新架構（見下方詳細說明）
+- [x] Step 5.y：Telegram 錯誤通知（telegram_notify.py；auto_swap / update_lineup except 接 tg_send；Pi5 + 本機 config 部署完成）
 - [x] Step 5.x：Pi5 手動觸發 Dashboard（Flask）
   - [x] 安裝 Flask 到 Pi5 venv
   - [x] 寫 `sync/dashboard.py`（Flask app，port 5001，三個按鈕，SSE streaming 輸出）

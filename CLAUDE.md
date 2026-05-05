@@ -64,10 +64,18 @@ crontab.txt   Pi5 cron 設定參考（套用：crontab crontab.txt）
   - URL 加 `stat1=S_L14` 可讓頁面顯示 14 天 stats（cells[9-14] = H/AB, R, HR, RBI, SB, AVG）
 - Ranking 公式推測方向：對球員 stats 跑 z-score 加權，可用 Playwright 爬樣本後做回歸驗證
 
+## Telegram 通知
+
+- Bot token + chat_id 存於 `~/.config/fantasy_baseball_telegram.json`（本機 + Pi5 各一份，不進 git）
+- `sync/telegram_notify.py` 提供 `send(message)` 函數，找不到 config 時靜默略過
+- `auto_swap.py` / `update_lineup.py` 的 except 塊已接 tg_send，出錯即時推播
+
 ## 踩坑紀錄
 
 - Mermaid 節點標籤換行必須用 `<br/>`，不能用 `\n`（`\n` 不會被解析，直接顯示成原文）
 - MLB Stats API 的 PPD（延賽）比賽仍出現在 schedule 回傳中，`status.detailedState` 為 `"Postponed"`；需主動過濾，否則延賽球員的 `Today_Status` 會被誤判為 `TBD`（非 `OFF`），導致 auto_swap 未觸發換人
+- `yahoo_session.json` 遺失或失效時，Pi5（無 X server）會嘗試開有頭瀏覽器並炸掉；`yahoo_playwright.py` 已加防呆（無 DISPLAY 環境直接 raise RuntimeError）。修復流程：在本機執行 `python3 sync/yahoo_playwright.py --reauth`，完成後 `scp yahoo_session.json pi@pi5-1.local:~/fantasy-baseball/`
+- Yahoo session 壽命約 **2 週**（實測：4/13 建立，4/29 到期）。到期時 Telegram 會推播，收到再處理即可，不需定期主動 reauth
 
 ## 溝通
 

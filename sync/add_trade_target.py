@@ -319,6 +319,15 @@ def parse_stat(raw) -> float | None:
         return None
 
 
+def fetch_pct_owned(league, player_id: int) -> float | None:
+    try:
+        items = league.percent_owned([player_id])
+        item = next((x for x in items if x["player_id"] == player_id), None)
+        return item["percent_owned"] if item else None
+    except Exception:
+        return None
+
+
 def patch_stats_to_db1(
     key: str,
     league,
@@ -329,6 +338,11 @@ def patch_stats_to_db1(
     yahoo_id = str(player["player_id"])
     now_iso  = datetime.now(ZoneInfo("Asia/Tokyo")).isoformat()
     props: dict = {"Stats_Updated_At": {"date": {"start": now_iso}}}
+
+    pct_owned = fetch_pct_owned(league, player["player_id"])
+    if pct_owned is not None:
+        props["Pct_Owned"] = {"number": pct_owned / 100}
+        print(f"    Ros%: {pct_owned}%")
     ok, fail = 0, 0
 
     for period_label, req_type in PERIODS:

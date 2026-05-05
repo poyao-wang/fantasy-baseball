@@ -31,7 +31,7 @@ fantasy-baseball/
 │   ├── update_schedule.py      兩週賽程 PATCH → DB1 schedule props This_Mon～Next_Sun（每週一）
 │   ├── update_lineup.py        Current_Slot + Today_Status + schedule props 同步 → DB1（每小時）
 │   ├── update_stats.py         區間統計（7d/30d/season）patch → Fantasy Roster（每週一）
-│   ├── add_trade_target.py     交易目標一鍵加入（DB1 Players + schedule props + stats）
+│   ├── add_trade_target.py     交易目標一鍵加入（DB1 Players + schedule props + stats + Ros%）
 │   ├── setup_db_week.py        DB_Week 建立 + 整季週次寫入 + DB1 新增 schedule props（一次性）
 │   ├── yahoo_playwright.py     Yahoo 登入模組，session 存 yahoo_session.json
 │   ├── setup_default_slot.py   Fantasy Roster Default_Slot 初始化（一次性）
@@ -80,7 +80,7 @@ crash 時記 `ERROR: <訊息>`，方便排查。
 **注意事項：**
 - **時區依賴**：cron 以 Pi5 系統時區（JST）計算，若時區設定被更動所有排程會整體偏移
 - **夏令時間（DST）**：ET 夏令（EDT, UTC-4）與冬令（EST, UTC-5）切換時，JST↔ET 偏差會從 13h 變成 14h，Waiver 時間仍準確但對照表數字需注意
-- **錯誤不顯示**：所有 cron output 導向 `/dev/null`，腳本層錯誤只能查 `sync.log`
+- **錯誤通知**：所有 cron output 導向 `/dev/null`，但 `auto_swap` / `update_lineup` 的 exception 會透過 Telegram bot 即時推播；詳見 [Telegram 通知](#telegram-通知)
 
 ## 常用指令
 
@@ -206,17 +206,19 @@ await page.evaluate("""() => {
 await page.evaluate("document.querySelector(\"form[action*='editroster']\").submit()")
 ```
 
-### 初次登入（存 session）
+### 初次登入 / session 過期（存 session）
 
 ```bash
 # Mac（有頭模式，完成 Yahoo 登入含 2FA 後自動存 session）
-python3.12 sync/yahoo_playwright.py
+python3.12 sync/yahoo_playwright.py --reauth
 
 # RPi 部署：在 Mac 登入後 scp session 過去
 scp yahoo_session.json pi@pi5-1.local:~/fantasy-baseball/
 ```
 
-> **注意**：ET 早上 8–9 點 Yahoo 網站偶爾很慢，session 驗證可能 timeout。`yahoo_playwright.py` 遇到 timeout 會樂觀假設 session 仍有效繼續執行，若實際 session 失效才會在 form submit 時報錯。
+> **Session 壽命**：約 2 週自然過期（實測）。到期時 Telegram 會推播通知，收到再執行上述流程即可，不需定期主動 reauth。
+> Pi5（無 X server）session 失效時不會嘗試互動登入，而是直接 raise RuntimeError 並透過 Telegram 推播。
+> ET 早上 8–9 點 Yahoo 網站偶爾很慢，session 驗證可能 timeout，`yahoo_playwright.py` 遇到 timeout 會樂觀假設 session 仍有效繼續執行。
 
 ## Dashboard（手動觸發）
 
@@ -236,6 +238,18 @@ sudo journalctl -u fantasy-dashboard -n 30
 # 重啟
 sudo systemctl restart fantasy-dashboard
 ```
+
+## Telegram 通知
+
+`auto_swap.py` / `update_lineup.py` 出現 exception 時自動推播 Telegram。
+
+config 存於 `~/.config/fantasy_baseball_telegram.json`（本機 + Pi5 各一份，不進 git）：
+
+```json
+{"token": "<bot_token>", "chat_id": <your_chat_id>}
+```
+
+Bot: [@fantasyBaseballAutoBot](https://t.me/fantasyBaseballAutoBot)
 
 ## 注意事項
 
