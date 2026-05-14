@@ -5,6 +5,8 @@ Fantasy Baseball Dashboard — 手動觸發排程的小 web UI
 
 import subprocess
 import threading
+from datetime import datetime, timezone
+from pathlib import Path
 from flask import Flask, Response, request, stream_with_context
 
 app = Flask(__name__)
@@ -53,9 +55,21 @@ JOBS = {
 _lock = threading.Lock()
 _running = False
 
-REAUTH_CARD = """<div class="card">
+def _reauth_info() -> str:
+    p = Path(BASE) / "yahoo_session.json"
+    if not p.exists():
+        return "<span style='color:#ff6b6b'>找不到 session 檔</span>"
+    mtime = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
+    now = datetime.now(tz=timezone.utc)
+    days = (now - mtime).days
+    ts = mtime.strftime("%Y-%m-%d %H:%M UTC")
+    color = "#4cff91" if days < 10 else "#ffb347" if days < 14 else "#ff6b6b"
+    return f"<span style='color:{color}'>上次 reauth：{ts}（{days} 天前）</span>"
+
+
+REAUTH_CARD_TPL = """<div class="card">
   <h2>Yahoo Session Reauth</h2>
-  <p>session 過期時，複製指令在本機 terminal 執行</p>
+  <p>{info}</p>
   <button onclick="copyReauth()">複製指令</button>
   <span id="reauth-copied" style="margin-left:12px;color:#4cff91;display:none;">已複製！</span>
   <div id="reauth-cmd" style="margin-top:12px;background:#0d0d1a;border:1px solid #333;border-radius:4px;
@@ -166,7 +180,7 @@ def index():
         CARD_TPL.format(key=k, label=v["label"], desc=v["desc"])
         for k, v in JOBS.items()
     )
-    cards += "\n" + REAUTH_CARD
+    cards += "\n" + REAUTH_CARD_TPL.format(info=_reauth_info())
     cards += "\n" + TRADE_CARD
     return HTML.replace("__CARDS__", cards)
 
