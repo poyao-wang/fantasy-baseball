@@ -10,8 +10,8 @@ flowchart TD
     end
 
     subgraph RPi["Raspberry Pi（自動化）"]
-        S1["cron: 每週一 09:00 JST<br/>update_roster.py<br/>update_schedule.py<br/>update_stats.py<br/>sync_log.py"]
-        S2["cron: 每日 18:30 JST<br/>update_roster.py → sync_log.py<br/>（Waiver 處理後）"]
+        S1["cron: 每天 18:30 JST<br/>update_roster.py<br/>update_schedule.py<br/>update_stats.py<br/>sync_log.py"]
+        S2["cron: 每天 19:00 JST<br/>update_lineup.py → auto_swap.py → sync_log.py<br/>（全量更新後補跑）"]
         S2b["cron: 每小時 22:00–08:00 JST<br/>update_lineup.py → auto_swap.py → sync_log.py"]
         S3["手動觸發<br/>add_trade_target.py<br/>（加入觀察球員時）"]
         S4["Dashboard（port 5001）<br/>Flask web UI<br/>手動觸發五個排程 + 新增交易目標"]
@@ -126,9 +126,9 @@ flowchart TD
 
 | 腳本 | 觸發 | 說明 |
 |------|------|------|
-| `update_roster.py` | 每週一 / 手動 | 從 Yahoo API 拉自己陣容，upsert DB1；upsert 後自動比對 Notion My Roster，archive 已離隊球員 |
-| `update_schedule.py` | 每週一 | PATCH DB1 所有球員的 This_Mon～Next_Sun 14 個 schedule props + Current_Week relation；支援 --dry-run |
-| `update_stats.py` | 每週一 | 從 Yahoo API 拉數據，patch DB1 stats 欄位（_7d/_30d/_season） |
+| `update_roster.py` | 每天 18:30 / 手動 | 從 Yahoo API 拉自己陣容，upsert DB1；upsert 後自動比對 Notion My Roster，archive 已離隊球員 |
+| `update_schedule.py` | 每天 18:30 | PATCH DB1 所有球員的 This_Mon～Next_Sun 14 個 schedule props + Current_Week relation；支援 --dry-run |
+| `update_stats.py` | 每天 18:30 | 從 Yahoo API 拉數據，patch DB1 stats 欄位（_7d/_30d/_season） |
 | `update_lineup.py` | 每小時 22–08 JST | Yahoo API 同步 DB1 Current_Slot + MLB API 更新 DB1 Today_Status + schedule props（opposing SP 即時） |
 | `add_trade_target.py` | 手動（Dashboard 或 CLI） | 輸入球員姓名或 Yahoo ID → 查 Yahoo API → upsert DB1 + PATCH DB1 兩週 schedule props + patch stats + Ros%；結果寫入 sync.log |
 | `setup_db_week.py` | 手動（一次性） | 建立 DB_Week Notion DB + 寫入整季 26 週次 + DB1 新增 14 個 schedule props + Current_Week relation |
@@ -157,14 +157,14 @@ flowchart TD
 ## Cron 排程（RPi）
 
 ```
-# 每週一 9:00 JST = 0:00 UTC（全量更新）
-0 0 * * 1  cd ~/fantasy-baseball && source venv/bin/activate && python sync/update_roster.py && python sync/update_schedule.py && python sync/update_stats.py ; python sync/sync_log.py
+# 每天 18:30 JST（09:30 EDT）：陣容 / 賽程 / 統計全量更新
+30 18 * * * cd ~/fantasy-baseball && venv/bin/python3 sync/update_roster.py > /dev/null 2>&1 && venv/bin/python3 sync/update_schedule.py > /dev/null 2>&1 && venv/bin/python3 sync/update_stats.py > /dev/null 2>&1 && venv/bin/python3 sync/sync_log.py > /dev/null 2>&1
 
-# 每日 18:30 JST = 9:30 UTC（Waiver 結果後同步陣容）
-30 9 * * *  cd ~/fantasy-baseball && venv/bin/python3 sync/update_roster.py > /dev/null 2>&1; venv/bin/python3 sync/sync_log.py > /dev/null 2>&1
+# 每天 19:00 JST（10:00 EDT）：打線更新 + 自動換人（全量更新後補跑）
+0 19 * * * cd ~/fantasy-baseball && venv/bin/python3 sync/update_lineup.py > /dev/null 2>&1 && venv/bin/python3 sync/auto_swap.py > /dev/null 2>&1; venv/bin/python3 sync/sync_log.py > /dev/null 2>&1
 
-# 每小時（22:00–08:00 JST = 13:00–23:00 UTC）打線更新 + 自動換人
-0 13-23 * * *  cd ~/fantasy-baseball && source venv/bin/activate && python sync/update_lineup.py ; python sync/auto_swap.py ; python sync/sync_log.py
+# 每小時（22:00–08:00 JST = 13:00–23:00 EDT）：打線更新 + 自動換人
+0 22-23,0-8 * * * cd ~/fantasy-baseball && venv/bin/python3 sync/update_lineup.py > /dev/null 2>&1 && venv/bin/python3 sync/auto_swap.py > /dev/null 2>&1; venv/bin/python3 sync/sync_log.py > /dev/null 2>&1
 ```
 
 ---

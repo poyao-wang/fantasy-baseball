@@ -14,20 +14,12 @@ PYTHON = f"{BASE}/venv/bin/python3"
 
 JOBS = {
     "weekly": {
-        "label": "全量更新（週一）",
+        "label": "全量更新（每日 18:30）",
         "desc": "update_roster + update_schedule + update_stats + sync_log",
         "cmds": [
             [PYTHON, f"{BASE}/sync/update_roster.py"],
             [PYTHON, f"{BASE}/sync/update_schedule.py"],
             [PYTHON, f"{BASE}/sync/update_stats.py"],
-            [PYTHON, f"{BASE}/sync/sync_log.py"],
-        ],
-    },
-    "roster": {
-        "label": "陣容同步（每日）",
-        "desc": "update_roster + sync_log",
-        "cmds": [
-            [PYTHON, f"{BASE}/sync/update_roster.py"],
             [PYTHON, f"{BASE}/sync/sync_log.py"],
         ],
     },
@@ -60,6 +52,17 @@ JOBS = {
 
 _lock = threading.Lock()
 _running = False
+
+REAUTH_CARD = """<div class="card">
+  <h2>Yahoo Session Reauth</h2>
+  <p>session 過期時，複製指令在本機 terminal 執行</p>
+  <button onclick="copyReauth()">複製指令</button>
+  <span id="reauth-copied" style="margin-left:12px;color:#4cff91;display:none;">已複製！</span>
+  <div id="reauth-cmd" style="margin-top:12px;background:#0d0d1a;border:1px solid #333;border-radius:4px;
+       padding:10px 14px;font-size:13px;color:#00d4ff;display:none;">
+    cd ~/Documents/projects/fantasy-baseball &amp;&amp; ./reauth_and_deploy.sh
+  </div>
+</div>"""
 
 TRADE_CARD = """<div class="card">
   <h2>新增交易目標</h2>
@@ -129,6 +132,17 @@ function startStream(url) {
 
 function run(job) { startStream('/run/' + job); }
 
+function copyReauth() {
+  const cmd = 'cd ~/Documents/projects/fantasy-baseball && ./reauth_and_deploy.sh';
+  const box = document.getElementById('reauth-cmd');
+  const notice = document.getElementById('reauth-copied');
+  box.style.display = 'block';
+  navigator.clipboard.writeText(cmd).then(() => {
+    notice.style.display = 'inline';
+    setTimeout(() => { notice.style.display = 'none'; }, 2000);
+  });
+}
+
 function runTrade() {
   const q = document.getElementById('trade-input').value.trim();
   if (!q) { alert('請輸入球員姓名或 Yahoo ID'); return; }
@@ -152,6 +166,7 @@ def index():
         CARD_TPL.format(key=k, label=v["label"], desc=v["desc"])
         for k, v in JOBS.items()
     )
+    cards += "\n" + REAUTH_CARD
     cards += "\n" + TRADE_CARD
     return HTML.replace("__CARDS__", cards)
 

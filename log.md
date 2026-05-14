@@ -2,6 +2,8 @@
 
 ## System Log
 
+2026-05-07 [Config] 調整 Pi5 cron 排程：全量更新從週一 09:00 改為每天 18:30 JST；取消每日 18:30 waiver 陣容更新；新增每天 19:00 打線更新 + 自動換人；同步更新 dashboard.py、README.md、notion-plan.md
+
 2026-04-12 [Init] 建立專案資料夾
 2026-04-12 [Auth] Yahoo OAuth2 認證完成（Consumer Key + Access Token 存入 oauth2.json）
 2026-04-12 [Fetch] 聯盟靜態資訊存入 league_info.json
