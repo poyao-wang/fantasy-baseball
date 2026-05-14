@@ -2,6 +2,8 @@
 
 ## System Log
 
+2026-05-15 [Feature] Yahoo session reauth 流程優化：新增 reauth_and_deploy.sh（本機一鍵 reauth + scp to Pi5）；dashboard 新增 Reauth card（顯示上次 session 時間 / 距今天數，顏色提示剩餘壽命）；確認 Yahoo API fspt-w Write scope 不開放，Playwright 換人機制無法用 REST API 取代
+
 2026-05-07 [Config] 調整 Pi5 cron 排程：全量更新從週一 09:00 改為每天 18:30 JST；取消每日 18:30 waiver 陣容更新；新增每天 19:00 打線更新 + 自動換人；同步更新 dashboard.py、README.md、notion-plan.md
 
 2026-04-12 [Init] 建立專案資料夾
